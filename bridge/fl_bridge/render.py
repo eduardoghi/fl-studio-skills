@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 
@@ -39,28 +40,32 @@ def command(fl, project, output):
     return [str(fl), f"/R{output}", "/Ewav", f"/O{output.parent}", str(project)]
 
 
-def render(project, output, timeout=300, running=fl_is_running, run=subprocess.run):
+def render(project, output, timeout=300, overwrite=False, running=fl_is_running, run=subprocess.run):
     """Render project to output and return the size of the WAV.
 
-    Works on a copy, so FL can't touch the project file. Only what was saved
-    to disk is rendered.
+    Works on a copy, so FL can't touch the project file. The copy stays next to
+    the project, so samples referenced by relative paths still resolve. Only
+    what was saved to disk is rendered.
     """
     project = Path(project)
     output = Path(output)
     if not project.is_file():
         raise RenderError(f"{project} doesn't exist")
+    if output.exists() and not overwrite:
+        raise RenderError(f"{output} already exists")
     if running():
         raise RenderError("FL Studio is open. The command line render only works with it closed")
     output.parent.mkdir(parents=True, exist_ok=True)
+    copy = project.with_name(f".fl-bridge-render-{uuid.uuid4().hex}.flp")
     with tempfile.TemporaryDirectory() as folder:
-        work = Path(folder)
-        copy = work / "render.flp"
+        rendered = Path(folder) / "render.wav"
         shutil.copy2(project, copy)
-        rendered = work / "render.wav"
         try:
             done = run(command(find_fl(), copy, rendered), check=False, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             raise RenderError(f"FL didn't finish within {timeout} s") from exc
+        finally:
+            copy.unlink(missing_ok=True)
         if done.returncode != 0:
             raise RenderError(f"FL exited with code {done.returncode}")
         if not rendered.is_file() or rendered.stat().st_size < 1000:
