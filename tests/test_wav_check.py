@@ -62,6 +62,28 @@ class WavCheck(unittest.TestCase):
         self.assertIn("RMS -9.0 dBFS", out)
         self.assertIn("500-2000 Hz 100%", out)
 
+    def test_measure_a_section(self):
+        x = np.concatenate([tone(1000, 2, amp=0.05), tone(1000, 2, amp=0.5)])
+        out = self.run_tool("measure", self.write("a.wav", x), "--start", "2.5", "--end", "3.5")
+        self.assertIn("1.0 s", out)
+        self.assertIn("peak -6.0 dBFS", out)
+
+    def test_match_refuses_a_level_that_would_clip(self):
+        spiky = tone(440, 2, amp=0.01)
+        spiky[100] = 0.9
+        path = self.write("a.wav", spiky)
+        out_dir = os.path.join(self.tmp.name, "out")
+        done = subprocess.run(
+            [sys.executable, WAV_CHECK, "match", out_dir, "--rms", "-10", path],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("would clip", done.stderr)
+        self.assertIn("Try --rms", done.stderr)
+        self.assertFalse(os.path.exists(out_dir))
+
     def test_reads_24_bit_and_float(self):
         for name, kwargs in (("p24.wav", {"bits": 24}), ("f32.wav", {"fmt_tag": 3, "bits": 32})):
             out = self.run_tool("measure", self.write(name, tone(1000, 1), **kwargs))

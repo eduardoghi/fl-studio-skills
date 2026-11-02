@@ -2,6 +2,7 @@
 """Measure exported audio, for music work where the agent can't listen.
 
   wav-check measure a.wav b.wav                 peak, RMS, loudest passage, energy per band
+  wav-check measure a.wav --start 20 --end 40   the same for one section
   wav-check timeline a.wav --step 4             peak per interval, to find the tail and the real end
   wav-check noise a.wav --start 24              floor level, bands and slow level swings
   wav-check thumps a.wav --bpm 95               low attacks with almost no midrange, by beat
@@ -120,6 +121,10 @@ def envelope(sig, win):
 def cmd_measure(args):
     for path in args.files:
         x, rate = read_wav(path)
+        end = len(x) if args.end is None else int(args.end * rate)
+        x = x[int(args.start * rate) : end]
+        if len(x) < rate // 4:
+            sys.exit(f"{path}: the passage is shorter than 0.25 s")
         mono = x.mean(axis=1)
         win = int(rate * 0.4)
         loudest = envelope(mono, win).max(initial=0)
@@ -245,8 +250,7 @@ def cmd_width(args):
 
 
 def cmd_match(args):
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    prepared = []
     for path in args.files:
         x, rate = read_wav(path)
         if args.seconds is not None and len(x) > args.seconds * rate:
@@ -257,9 +261,21 @@ def cmd_match(args):
             gain = 10 ** (args.rms / 20) / max(rms(x), 1e-12)
         else:
             gain = 10 ** (args.peak / 20) / max(np.abs(x).max(), 1e-12)
-        target = out / Path(path).name
-        write_wav(target, x * gain, rate)
-        print(f"{target}: gain {db(gain):+.1f} dB, peak {db(np.abs(x * gain).max()):.1f} dBFS")
+        prepared.append((Path(path).name, x, rate, gain, db(np.abs(x).max()) + db(gain)))
+
+    # Checked before writing anything, since clipped copies would compare distortion instead of level.
+    loudest = max(peak for *_, peak in prepared)
+    if loudest > 0:
+        over = ", ".join(f"{name} at {peak:+.1f} dBFS" for name, _, _, _, peak in prepared if peak > 0)
+        level = "--rms" if args.rms is not None else "--peak"
+        target = (args.rms if args.rms is not None else args.peak) - loudest - 0.1
+        sys.exit(f"this level would clip {over}. Nothing was written. Try {level} {target:.1f}")
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    for name, x, rate, gain, peak in prepared:
+        write_wav(out / name, x * gain, rate)
+        print(f"{out / name}: gain {db(gain):+.1f} dB, peak {peak:.1f} dBFS")
 
 
 def main():
@@ -268,6 +284,8 @@ def main():
 
     p = sub.add_parser("measure")
     p.add_argument("files", nargs="+")
+    p.add_argument("--start", type=float, default=0, help="seconds, to compare sections of a song")
+    p.add_argument("--end", type=float)
     p.set_defaults(run=cmd_measure)
 
     p = sub.add_parser("timeline")
