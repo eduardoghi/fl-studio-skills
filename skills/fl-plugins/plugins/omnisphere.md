@@ -27,6 +27,11 @@ over the first beat of a 4 beat chord at 95 BPM, and all the notes after that. S
 Choosing a patch needs the interface. Pick DIRECTORY, then CATEGORY, then click a row in the list. One wheel notch
 scrolls the list by one row. An asterisk after the patch name means it was edited, and a changed octave counts.
 
+All of that worked with FL behind other windows. DIRECTORY and CATEGORY open Windows menus, which take `fl_menu_keys`
+because a posted click closes them without choosing. Those two appear on screen. After that, `fl_click` on a row or
+on the arrows beside the patch name changes the patch, and `fl_scroll` moves the list, with nothing shown in front of
+other programs. The arrows do nothing until a directory is chosen.
+
 Through the bridge the plugin reports 658 parameters, and only 10 are real. They are `Level (p1)` to `Level (p8)`, one
 per part, plus `Bypass` and `Program`. `fl_plugin_params` hides the other 648. Filter, envelope and patch controls
 aren't among them, so those stay on the panel. `fl_plugin_set` wasn't tried on it, and neither were `Program` or the

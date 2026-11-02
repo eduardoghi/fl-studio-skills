@@ -47,7 +47,8 @@ What follows from that for a bridge with an outside process:
 isolated. Don't rely on `OnIdle` alone. A bridge can do its work from `OnMidiMsg` when the doorbell arrives and keep
 `OnIdle` as a polling fallback.
 
-Reload the script from View > Script output after replacing the file. A running script keeps the old code.
+Reload the script from View > Script output after replacing the file. A running script keeps the old code. That panel
+is a top-level window that stays above FL and takes up the screen, so close it after reloading. `WM_CLOSE` works.
 
 ## Mixer and channels
 
@@ -76,13 +77,14 @@ the mixer track and slot goes from 0 to 9.
 
 ## Piano roll
 
-- A piano roll that is already open keeps its channel when another one is selected. Select the channel, hide the
-  window, and show it in a later request.
+- A piano roll that is already open keeps its channel when another one is selected. Hide the window, select the
+  channel and show the window, each in its own request. With the hide and the selection in one call, FL put the
+  selection back on the piano roll's channel, and waiting longer didn't help.
 - The caption can't prove the channel. FL draws the name itself, so `ui.getFocusedFormCaption()` and Windows both
   return `Piano roll -`. Compare the existing notes before writing. Comparing note counts was right on 10 of 10
   alternating reads, but two channels can share a count, so a hash of the notes is safer.
 - Nothing in the API starts a piano roll script. Ctrl+Alt+Y runs the last one again, after a first run from
-  Tools > Scripts in that session, and the keys need FL as the active window.
+  Tools > Scripts in that session. See "Working without focus" for pressing it with FL behind other windows.
 
 ## Rendering
 
@@ -90,6 +92,39 @@ the mixer track and slot goes from 0 to 9.
 20 s of music with two Ample Guitar instances, and the file matched an export from the dialog within 0.2 dB of peak
 and RMS. With FL already open the same command exits with code 0 and writes nothing, so check that the file exists.
 No script call to load a plugin or render audio turned up, so plugin slots go through the interface.
+
+## Working without focus
+
+FL can stay behind other windows while it is driven, so the person can keep typing elsewhere. Messages posted to its
+windows don't take the focus or move the mouse. Menus and dialogs still appear above other programs, so aim for not
+taking the focus rather than for not being seen.
+
+| Action | What worked | What failed |
+|---|---|---|
+| See FL | `PrintWindow` with flag 2 on the main window | Minimized, it returns a 160x28 bar or fails |
+| Click a panel or a VST | Post `WM_MOUSEMOVE`, button down and up to the innermost window at the point | A click sent to a parent panel |
+| Scroll | Post `WM_MOUSEWHEEL` to the innermost window, with screen coordinates in lParam | |
+| Choose a menu item | Post arrow keys and enter to the menu's window | Posted clicks close the menu and choose nothing |
+| Press a shortcut | Hold the modifiers in FL's thread, then post the key to a panel | Posting to the main window, or posting Ctrl as a key |
+| Load a plugin | Row menu in the browser, `Open in new channel` | Posted drags start and never drop |
+| Fill a save dialog | `WM_SETTEXT` on the `Edit` with id 1001, `BM_CLICK` on button 1 | The other `Edit`, which belongs to the address bar and is ignored |
+| Export | Ctrl+R on a panel, then Render minimized | Start brought FL in front of other windows, though Render minimized was the only step changed |
+
+Shortcuts need the most care. FL reads Ctrl and Alt from the state of its own thread, so attach to that thread with
+`AttachThreadInput`, change the state with `SetKeyboardState`, post the key with `WM_SYSKEYDOWN` when Alt is held, and
+restore the state before detaching. Only FL's thread sees the change, so the real keyboard isn't affected. Ctrl+Alt+Y
+and Ctrl+R both worked sent to the piano roll, and Ctrl+Alt+Y did nothing sent to the main window.
+
+- Menus are `TQuickPopupMenuWindow` for FL and `#32768` for a VST such as Omnisphere. Both are top-level windows of
+  FL's process, so capture them on their own.
+- Keys skip disabled rows, so counts change with the state of the project. `Run last script again` only enables after
+  a first run, for example. Capture the menu and read the highlighted row before sending enter.
+- Keep the menus open for as little as possible by sending all the keys from one process.
+- Enter and escape can close a menu before the key is released, so don't treat a failed key up as an error.
+- A plugin's row menu has a fixed size in the browser, which tells it from the menu of a folder before choosing.
+- The bridge kept working while FL was minimized, but nothing can be seen or clicked there.
+- Check window order as well as focus when testing this. FL came to the front during an export without taking the
+  focus, and a test that only read the foreground window didn't notice.
 
 ## Driving the interface from outside
 

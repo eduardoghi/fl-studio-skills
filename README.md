@@ -34,7 +34,7 @@ scripts inside FL Studio.
 - `skills/audio-verification`: check rendered audio with measurements, since the agent can't listen. Covers
   noise, thumps, harshness, levels, chord notes and level-matched A/B comparisons.
 - `skills/fl-studio-scripting`: what scripts can and can't do inside FL Studio 2026, as observed on 26.1.4,
-  including its file restrictions, callbacks and how to drive the interface safely from outside.
+  including its file restrictions, callbacks and how to drive the interface from outside, with or without focus.
 
 - `skills/fl-plugins`: notes per plugin on what the controls do, defaults that cause trouble and parameter names.
 
