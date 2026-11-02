@@ -1,0 +1,290 @@
+#!/usr/bin/env python3
+"""Measure exported audio, for music work where the agent can't listen.
+
+  wav-check measure a.wav b.wav                 peak, RMS, loudest passage, energy per band
+  wav-check timeline a.wav --step 4             peak per interval, to find the tail and the real end
+  wav-check noise a.wav --start 24              floor level, bands and slow level swings
+  wav-check thumps a.wav --bpm 95               low attacks with almost no midrange, by beat
+  wav-check chords a.wav --bpm 95 'Bm:0.3-3.3:B,F#,C#'    expected pitch classes per passage
+  wav-check width a.wav                         left/right correlation and side level
+  wav-check match out/ --peak -8.8 a.wav b.wav  copies at the same level, for A/B listening
+
+Reads 16, 24 and 32 bit PCM and 32 bit float WAV files. Needs numpy.
+"""
+import argparse
+import struct
+import sys
+from pathlib import Path
+
+import numpy as np
+
+BANDS = ((20, 120), (120, 500), (500, 2000), (2000, 6000), (6000, 20000))
+NOTES = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6, "Gb": 6,
+         "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
+NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]
+
+
+def read_wav(path):
+    """Return samples shaped (frames, channels) as floats, and the sample rate."""
+    data = Path(path).read_bytes()
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        sys.exit(f"{path}: not a WAV file")
+    pos = 12
+    fmt = raw = None
+    while pos + 8 <= len(data):
+        chunk, size = struct.unpack("<4sI", data[pos:pos + 8])
+        body = data[pos + 8:pos + 8 + size]
+        if chunk == b"fmt ":
+            fmt = body
+        elif chunk == b"data":
+            raw = body
+        pos += 8 + size + (size & 1)
+    if fmt is None or raw is None:
+        sys.exit(f"{path}: missing fmt or data chunk")
+    tag, channels, rate, _, _, bits = struct.unpack("<HHIIHH", fmt[:16])
+    if tag == 0xFFFE:  # WAVE_FORMAT_EXTENSIBLE keeps the real format in its subformat GUID.
+        tag = struct.unpack("<H", fmt[24:26])[0]
+    if tag == 3 and bits == 32:
+        x = np.frombuffer(raw, "<f4").astype(float)
+    elif tag == 1 and bits == 16:
+        x = np.frombuffer(raw, "<i2").astype(float) / 32768
+    elif tag == 1 and bits == 24:
+        b = np.frombuffer(raw, "u1").reshape(-1, 3).astype(np.int32)
+        v = b[:, 0] | (b[:, 1] << 8) | (b[:, 2] << 16)
+        x = np.where(v >= 1 << 23, v - (1 << 24), v) / float(1 << 23)
+    elif tag == 1 and bits == 32:
+        x = np.frombuffer(raw, "<i4").astype(float) / 2147483648
+    else:
+        sys.exit(f"{path}: unsupported format (tag {tag}, {bits} bit)")
+    return x.reshape(-1, channels), rate
+
+
+def write_wav(path, x, rate):
+    """Write 16 bit PCM."""
+    pcm = (np.clip(x, -1, 1) * 32767).astype("<i2").tobytes()
+    channels = x.shape[1]
+    head = b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt "
+    head += struct.pack("<IHHIIHH", 16, 1, channels, rate, rate * channels * 2, channels * 2, 16)
+    Path(path).write_bytes(head + b"data" + struct.pack("<I", len(pcm)) + pcm)
+
+
+def db(value):
+    return 20 * np.log10(max(float(value), 1e-12))
+
+
+def rms(x):
+    return float(np.sqrt((x ** 2).mean())) if len(x) else 0.0
+
+
+def band_shares(mono, rate):
+    power = np.abs(np.fft.rfft(mono * np.hanning(len(mono)))) ** 2
+    freqs = np.fft.rfftfreq(len(mono), 1 / rate)
+    parts = [power[(freqs >= lo) & (freqs < hi)].sum() for lo, hi in BANDS]
+    total = sum(parts) or 1
+    return [100 * p / total for p in parts]
+
+
+def format_shares(shares):
+    return ", ".join(f"{lo}-{hi} Hz {s:.0f}%" for (lo, hi), s in zip(BANDS, shares))
+
+
+def band_pass(sig, rate, lo, hi):
+    spectrum = np.fft.rfft(sig)
+    freqs = np.fft.rfftfreq(len(sig), 1 / rate)
+    spectrum[(freqs < lo) | (freqs >= hi)] = 0
+    return np.fft.irfft(spectrum, len(sig))
+
+
+def envelope(sig, win):
+    return np.array([rms(sig[i:i + win]) for i in range(0, max(len(sig) - win, 0), win)])
+
+
+def cmd_measure(args):
+    for path in args.files:
+        x, rate = read_wav(path)
+        mono = x.mean(axis=1)
+        win = int(rate * 0.4)
+        loudest = envelope(mono, win).max(initial=0)
+        print(Path(path).name)
+        print(f"  {len(x) / rate:.1f} s, {rate} Hz, {x.shape[1]} ch")
+        print(f"  peak {db(np.abs(x).max()):.1f} dBFS, RMS {db(rms(x)):.1f} dBFS, loudest passage {db(loudest):.1f} dBFS")
+        print(f"  {format_shares(band_shares(mono, rate))}")
+
+
+def cmd_timeline(args):
+    x, rate = read_wav(args.file)
+    step = int(args.step * rate)
+    for i in range(0, len(x), step):
+        print(f"{i / rate:7.1f} s  {db(np.abs(x[i:i + step]).max()):6.1f} dBFS")
+
+
+def cmd_noise(args):
+    x, rate = read_wav(args.file)
+    end = int(args.end * rate) if args.end is not None else len(x)
+    seg = x[int(args.start * rate):end]
+    if len(seg) < rate // 4:
+        sys.exit("the passage is shorter than 0.25 s")
+    mono = seg.mean(axis=1)
+    print(f"{len(seg) / rate:.1f} s, peak {db(np.abs(seg).max()):.1f} dBFS, RMS {db(rms(seg)):.1f} dBFS")
+    print(format_shares(band_shares(mono, rate)))
+    if len(seg) / rate < 5:
+        print("too short to measure slow swings, use at least 5 s")
+        return
+    hop = 0.05
+    env = envelope(mono, int(hop * rate))
+    env = env - env.mean()
+    mag = np.abs(np.fft.rfft(env * np.hanning(len(env))))
+    freqs = np.fft.rfftfreq(len(env), hop)
+    mask = (freqs > 0.1) & (freqs < 6)
+    swing = (np.percentile(env, 95) - np.percentile(env, 5)) / max(rms(mono), 1e-12)
+    print(f"strongest swing {freqs[mask][mag[mask].argmax()]:.2f} Hz, depth {swing:.2f} of the RMS")
+
+
+def cmd_thumps(args):
+    x, rate = read_wav(args.file)
+    mono = x.mean(axis=1)
+    beat = 60 / args.bpm
+    win = int(0.03 * rate)
+    low = envelope(band_pass(mono, rate, 40, 300), win)
+    mid = envelope(band_pass(mono, rate, 300, 2000), win)
+    rise = np.diff(low, prepend=low[0])
+    limit = np.percentile(rise, 99)
+    found = 0
+    for i in range(1, len(rise) - 2):
+        if rise[i] < limit or rise[i] < rise[i - 1] or rise[i] < rise[i + 1]:
+            continue
+        # The envelope peaks one frame after the steepest rise.
+        difference = db(low[i + 1]) - db(mid[i + 1])
+        if difference < args.min_difference:
+            continue
+        found += 1
+        at = (i + 0.5) * win / rate / beat
+        print(f"beat {at:6.2f}, bar {int(at // args.beats_per_bar) + 1}, low {db(low[i + 1]):.1f} dBFS, "
+              f"{difference:.1f} dB above the midrange")
+    if not found:
+        print(f"no low attack stands {args.min_difference:g} dB above the midrange")
+
+
+def parse_passage(text):
+    name, span, notes = text.split(":")
+    start, end = span.split("-")
+    return name, float(start), float(end), {NOTES[n.strip()] for n in notes.split(",")}
+
+
+def pitch_classes(seg, rate):
+    power = np.abs(np.fft.rfft(seg * np.hanning(len(seg)))) ** 2
+    freqs = np.fft.rfftfreq(len(seg), 1 / rate)
+    keep = (freqs >= 70) & (freqs <= 1000)
+    classes = np.rint(12 * np.log2(freqs[keep] / 440) + 69).astype(int) % 12
+    chroma = np.zeros(12)
+    np.add.at(chroma, classes, power[keep])
+    return chroma
+
+
+def cmd_chords(args):
+    x, rate = read_wav(args.file)
+    mono = x.mean(axis=1)
+    beat = 60 / args.bpm
+    bad = 0
+    for text in args.passages:
+        try:
+            name, start, end, expected = parse_passage(text)
+        except (KeyError, ValueError):
+            sys.exit(f"bad passage {text!r}, use NAME:START-END:NOTE,NOTE with beats and names like F# or Bb")
+        chroma = pitch_classes(mono[int(start * beat * rate):int(end * beat * rate)], rate)
+        order = np.argsort(chroma)[::-1]
+        strongest = {int(i) for i in order[:len(expected)]}
+        missing = expected - strongest
+        extra = strongest - expected
+        bad += bool(missing)
+        status = "ok" if not missing else "DIFFERS"
+        print(f"{name:8} beats {start:g}-{end:g}  {status}  strongest "
+              f"{' '.join(NAMES[i] for i in order[:len(expected)])}"
+              + (f"  missing {' '.join(NAMES[i] for i in sorted(missing))}" if missing else "")
+              + (f"  extra {' '.join(NAMES[i] for i in sorted(extra))}" if extra else ""))
+    return 1 if bad else 0
+
+
+def cmd_width(args):
+    for path in args.files:
+        x, _ = read_wav(path)
+        if x.shape[1] != 2:
+            print(f"{Path(path).name}: not stereo")
+            continue
+        mid = (x[:, 0] + x[:, 1]) / 2
+        side = (x[:, 0] - x[:, 1]) / 2
+        corr = 1.0 if rms(side) == 0 else float(np.corrcoef(x[:, 0], x[:, 1])[0, 1])
+        print(f"{Path(path).name}: correlation {corr:.2f}, side minus mid {db(rms(side)) - db(rms(mid)):.1f} dB, "
+              f"left minus right {db(rms(x[:, 0])) - db(rms(x[:, 1])):.1f} dB")
+
+
+def cmd_match(args):
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    for path in args.files:
+        x, rate = read_wav(path)
+        if args.seconds is not None and len(x) > args.seconds * rate:
+            x = x[:int(args.seconds * rate)].copy()
+            fade = min(int(args.fade * rate), len(x))
+            x[len(x) - fade:] *= np.linspace(1, 0, fade)[:, None]
+        if args.rms is not None:
+            gain = 10 ** (args.rms / 20) / max(rms(x), 1e-12)
+        else:
+            gain = 10 ** (args.peak / 20) / max(np.abs(x).max(), 1e-12)
+        target = out / Path(path).name
+        write_wav(target, x * gain, rate)
+        print(f"{target}: gain {db(gain):+.1f} dB, peak {db(np.abs(x * gain).max()):.1f} dBFS")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("measure")
+    p.add_argument("files", nargs="+")
+    p.set_defaults(run=cmd_measure)
+
+    p = sub.add_parser("timeline")
+    p.add_argument("file")
+    p.add_argument("--step", type=float, default=4)
+    p.set_defaults(run=cmd_timeline)
+
+    p = sub.add_parser("noise")
+    p.add_argument("file")
+    p.add_argument("--start", type=float, required=True, help="seconds, after the music has ended")
+    p.add_argument("--end", type=float)
+    p.set_defaults(run=cmd_noise)
+
+    p = sub.add_parser("thumps")
+    p.add_argument("file")
+    p.add_argument("--bpm", type=float, required=True)
+    p.add_argument("--beats-per-bar", type=int, default=4)
+    p.add_argument("--min-difference", type=float, default=12)
+    p.set_defaults(run=cmd_thumps)
+
+    p = sub.add_parser("chords")
+    p.add_argument("file")
+    p.add_argument("--bpm", type=float, required=True)
+    p.add_argument("passages", nargs="+", metavar="NAME:START-END:NOTES")
+    p.set_defaults(run=cmd_chords)
+
+    p = sub.add_parser("width")
+    p.add_argument("files", nargs="+")
+    p.set_defaults(run=cmd_width)
+
+    p = sub.add_parser("match")
+    p.add_argument("out")
+    p.add_argument("files", nargs="+")
+    level = p.add_mutually_exclusive_group(required=True)
+    level.add_argument("--peak", type=float, help="target peak in dBFS")
+    level.add_argument("--rms", type=float, help="target RMS in dBFS, better for comparing short passages")
+    p.add_argument("--seconds", type=float, help="cut each file here")
+    p.add_argument("--fade", type=float, default=1.5, help="fade before the cut, in seconds")
+    p.set_defaults(run=cmd_match)
+
+    args = parser.parse_args()
+    sys.exit(args.run(args) or 0)
+
+
+if __name__ == "__main__":
+    main()
