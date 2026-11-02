@@ -1,0 +1,65 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    secrets:
+        name: secrets
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            # Scans the whole history, since a secret in any commit stays readable in a public repository.
+            - name: gitleaks
+              run: |
+                  docker run --rm -v "$PWD":/repo -w /repo \
+                    ghcr.io/gitleaks/gitleaks@sha256:691af3c7c5a48b16f187ce3446d5f194838f91238f27270ed36eef6359a574d9 \
+                    git --no-banner --redact .
+
+    lint:
+        name: format and lint
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+              with:
+                  python-version: "3.14"
+            - run: pip install -r requirements-dev.txt
+            # Scripts in bin/ have no extension, so ruff only sees them when named.
+            - run: ruff format --check bin/wav-check tests
+            - run: ruff check bin/wav-check tests
+
+    test:
+        name: test on ${{ matrix.os }}
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 10
+        strategy:
+            fail-fast: false
+            matrix:
+                # Windows is where FL Studio runs, and macOS is left out until something here depends on it.
+                os: [ubuntu-latest, windows-latest]
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
+            - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+              with:
+                  python-version: "3.14"
+            - run: pip install -r requirements-dev.txt
+            - run: python -m unittest discover -s tests

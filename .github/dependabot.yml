@@ -1,0 +1,28 @@
+version: 2
+
+updates:
+    - package-ecosystem: github-actions
+      directory: "/"
+      schedule:
+          interval: weekly
+      # Wait out a version's first days so a compromised release can be flagged before a bump PR picks it up.
+      cooldown:
+          default-days: 5
+      commit-message:
+          prefix: "ci"
+
+    - package-ecosystem: pip
+      directory: "/"
+      schedule:
+          interval: weekly
+      cooldown:
+          default-days: 5
+      commit-message:
+          prefix: "build"
+      groups:
+          pip-minor-and-patch:
+              patterns:
+                  - "*"
+              update-types:
+                  - "minor"
+                  - "patch"

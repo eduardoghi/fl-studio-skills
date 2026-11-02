@@ -16,11 +16,14 @@ Skills and helper scripts for producing music in FL Studio with Claude Code. New
 ## Tests
 
 ```sh
+pip install -r requirements-dev.txt
 python3 -m unittest discover -s tests
+ruff format --check bin/wav-check tests
+ruff check bin/wav-check tests
 ```
 
-The tests synthesize their WAV files, so no audio or FL Studio is needed. They need `numpy` and are skipped
-without it.
+The tests synthesize their WAV files, so no audio or FL Studio is needed. The `wav-check` tests need `numpy` and
+are skipped without it.
 
 ## License
 
