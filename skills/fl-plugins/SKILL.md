@@ -15,10 +15,14 @@ Read only the file of the plugin in use:
 | Fruity Blood Overdrive | `plugins/fruity-blood-overdrive.md` | Louder than it looks, lower Post gain to compensate |
 | Fruity Reeverb 2 | `plugins/fruity-reeverb-2.md` | Match room size and decay |
 | Ample Guitar SC | `plugins/ample-guitar-sc.md` | Keyswitches are notes in the same piano roll |
+| Omnisphere 3 | `plugins/omnisphere.md` | Patches change the octave, and choosing one needs the interface |
+| ValhallaVintageVerb | `plugins/valhalla-vintageverb.md` | Starts at 100% mix |
+| EZdrummer 3 | `plugins/ezdrummer-3.md` | Almost nothing is reachable through the bridge |
+| Kontakt 8 | `plugins/kontakt.md` | Libraries are in Classic View, and `DEMO` marks an unregistered library |
 
-Each file says where its facts come from. "Manual" means Image-Line's or Ample Sound's documentation, in our own words.
-"Observed" means FL Studio 26.1.4 on one machine. The values are what one guitar track used, so they are starting
-points to measure and not targets.
+Each file says where its facts come from. "Manual" means the maker's documentation, in our own words. "Observed" means
+FL Studio 26.1.4 on one machine. The values are what one guitar track used, so they are starting points to measure and
+not targets.
 
 ## Working with a plugin
 
@@ -28,6 +32,9 @@ points to measure and not targets.
    ```text
    fl_plugin_params(track=10, slot=3, contains="reverb")
    ```
+
+   The list leaves out slots a VST didn't assign, such as `Param 12`, and the `MIDI CC #` and aftertouch entries FL
+   adds. `hidden` counts them, and `named_only=False` shows them.
 
 2. Set one by exact name. The value goes from 0 to 1, and the scale differs per parameter, so read the `text` field
    of the answer instead of assuming.
