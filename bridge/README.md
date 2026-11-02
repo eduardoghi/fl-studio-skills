@@ -30,13 +30,18 @@ It depends on the MCP SDK only. The MIDI message goes straight through `winmm`.
 
 - Load a plugin, create a channel, save the project or edit the Playlist. FL's scripting API offers none of these.
 - Choose a preset by name. It can only step to the next or previous one.
-- Render while FL is open. `fl_render` needs FL closed, and it uses what was last saved to disk.
+- Render while FL is open. `fl_render` needs FL closed, uses what was last saved to disk and won't replace an existing
+  WAV unless `overwrite` is set. It works on a copy next to the project, so relative sample paths still resolve.
 - Undo a plugin change through FL. Parameter changes stay out of its history, so `fl_plugin_set` returns the old value.
 
 ## Writing notes safely
 
-The piano roll can't say which channel it shows. Read the channel first, then pass its note count as `expect_notes`,
-and the script refuses to write if it finds another count. Two channels with the same count can't be told apart.
+The piano roll can't say which channel it shows. Read the channel first, then pass the `fingerprint` of its notes as
+`expect`, and the script refuses to write if it finds other notes. Each write returns the new fingerprint. Empty
+channels share one fingerprint, as do channels with identical notes, so those can't be told apart.
+
+The queue holds one action. A second one is refused until the first runs or `fl_queue_discard` drops it, and requests
+from separate Claude Code sessions wait for each other.
 
 `fl_piano_roll_run` sends keystrokes, so it refuses to run unless FL is the active window. If another piano roll
 script was the last one used, the shortcut repeats that script. The call then fails, because ClaudeBridge didn't

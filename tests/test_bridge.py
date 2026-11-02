@@ -6,8 +6,11 @@ Run with `python3 -m unittest discover -s tests`. The server tools need the mcp 
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import tempfile
+import threading
+import time
 import types
 import unittest
 from pathlib import Path
@@ -19,6 +22,7 @@ sys.path.insert(0, str(ROOT / "bridge"))
 from fl_bridge import client, doorbell, hotkey, paths, render
 
 SCRIPTS = ROOT / "bridge" / "fl_scripts"
+NOTE = {"pitch": 60, "start": 0, "length": 1}
 
 
 class FakeFL:
@@ -168,12 +172,12 @@ class PianoRollScript(unittest.TestCase):
         os.chdir(self.folder)
         self.addCleanup(os.chdir, self.previous)
 
-    def run_script(self, queue):
+    def run_script(self, queue, velocity=0.5):
         (self.folder / "pianoroll_queue.json").write_text(json.dumps(queue))
         score = types.SimpleNamespace(PPQ=96, noteCount=1, added=[])
         score.addNote = score.added.append
         score.clearNotes = lambda everything: None
-        score.getNote = lambda i: types.SimpleNamespace(number=60, time=192, length=96, velocity=0.5)
+        score.getNote = lambda i: types.SimpleNamespace(number=60, time=192, length=96, velocity=velocity)
 
         class Note:
             pass
@@ -194,31 +198,31 @@ class PianoRollScript(unittest.TestCase):
         )
         self.assertEqual((score.added[0].time, score.added[0].length), (192, 48))
         self.assertEqual((self.folder / "pianoroll_queue.json").read_text(), "{}")
-        self.assertEqual(self.done(), {"id": "a", "ok": True, "result": {"added": 1}})
+        self.assertEqual(self.done()["result"]["added"], 1)
 
-    def test_wrong_note_count_refuses_the_write(self):
-        score, _ = self.run_script(
-            {
-                "id": "a",
-                "action": "add_notes",
-                "expect_notes": 5,
-                "payload": {"notes": [{"pitch": 60, "start": 0, "length": 1}]},
-            }
-        )
+    def test_other_notes_refuse_the_write(self):
+        score, _ = self.run_script({"id": "a", "action": "add_notes", "expect": "abc", "payload": {"notes": [NOTE]}})
         self.assertEqual(score.added, [])
-        self.assertIn("expected 5 notes, found 1", self.done()["error"])
+        self.assertIn("expected fingerprint abc", self.done()["error"])
         self.assertEqual((self.folder / "pianoroll_queue.json").read_text(), "{}")
 
-    def test_matching_note_count_lets_the_write_through(self):
-        score, _ = self.run_script(
-            {
-                "id": "a",
-                "action": "add_notes",
-                "expect_notes": 1,
-                "payload": {"notes": [{"pitch": 60, "start": 0, "length": 1}]},
-            }
-        )
+    def test_matching_fingerprint_lets_the_write_through(self):
+        self.run_script({"id": "a", "action": "read"})
+        expected = self.done()["result"]["fingerprint"]
+        score, _ = self.run_script({"id": "b", "action": "add_notes", "expect": expected, "payload": {"notes": [NOTE]}})
         self.assertEqual(len(score.added), 1)
+
+    def test_fingerprint_tells_apart_channels_with_the_same_count(self):
+        self.run_script({"id": "a", "action": "read"})
+        first = self.done()["result"]["fingerprint"]
+        self.run_script({"id": "b", "action": "read"}, velocity=0.6)
+        self.assertNotEqual(self.done()["result"]["fingerprint"], first)
+
+    def test_a_bad_note_stops_the_whole_action(self):
+        notes = [NOTE, {"pitch": "x", "start": 0, "length": 1}]
+        score, _ = self.run_script({"id": "a", "action": "add_notes", "payload": {"notes": notes}})
+        self.assertEqual(score.added, [])
+        self.assertFalse(self.done()["ok"])
 
     def test_read_returns_beats(self):
         self.run_script({"id": "a", "action": "read"})
@@ -316,6 +320,64 @@ class Client(unittest.TestCase):
         with mock.patch.object(client, "call", return_value={"muted": False}):
             self.assertEqual(client.settled("mixer_get", {}, {"muted": None}, sleep=lambda _: None), {"muted": False})
 
+    def test_a_waiting_action_is_not_replaced(self):
+        client.queue_piano_roll("add_notes", {"notes": []})
+        with self.assertRaisesRegex(client.BridgeError, "still queued"):
+            client.queue_piano_roll("clear")
+        self.assertEqual(client.read_json(self.folder / "pianoroll_queue.json")["action"], "add_notes")
+
+    def test_discard_frees_the_queue(self):
+        client.queue_piano_roll("read")
+        self.assertEqual(client.discard_piano_roll(), "read")
+        self.assertIsNone(client.discard_piano_roll())
+        client.queue_piano_roll("clear")
+
+    def test_a_finished_action_frees_the_queue(self):
+        client.queue_piano_roll("read")
+        (self.folder / "pianoroll_queue.json").write_text("{}")
+        client.queue_piano_roll("clear")
+
+    def test_concurrent_calls_get_their_own_answers(self):
+        def ring():
+            request = json.loads((self.folder / "request.json").read_text())
+            time.sleep(0.01)
+            answer = {"id": request["id"], "ok": True, "result": request["params"]["n"]}
+            (self.folder / "response.json").write_text(json.dumps(answer))
+
+        results = {}
+
+        def work(n):
+            results[n] = client.call("ping", {"n": n}, timeout=5, ring=ring)
+
+        threads = [threading.Thread(target=work, args=(n,)) for n in range(12)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(results, {n: n for n in range(12)})
+
+    def test_lock_held_by_another_process_times_out(self):
+        code = (
+            "import sys, time; sys.path.insert(0, sys.argv[1]); from fl_bridge import client; from pathlib import Path\n"
+            "handle = open(Path(sys.argv[2]) / 'bridge.lock', 'a+b'); client._lock_file(handle)\n"
+            "print('held', flush=True); time.sleep(3)\n"
+        )
+        holder = subprocess.Popen(
+            [sys.executable, "-c", code, str(ROOT / "bridge"), str(self.folder)], stdout=subprocess.PIPE, text=True
+        )
+        self.addCleanup(holder.wait)
+        self.addCleanup(holder.stdout.close)
+        self.addCleanup(holder.kill)
+        self.assertEqual(holder.stdout.readline().strip(), "held")
+        with self.assertRaisesRegex(client.BridgeError, "another process"), client.exclusive(self.folder, timeout=0.2):
+            pass
+
+    def test_lock_is_free_after_use(self):
+        with client.exclusive(self.folder):
+            pass
+        with client.exclusive(self.folder, timeout=0.2):
+            pass
+
     def test_piano_roll_not_run_yet(self):
         self.assertIsNone(client.piano_roll_result(client.queue_piano_roll("read")))
 
@@ -351,6 +413,42 @@ class Render(unittest.TestCase):
         self.folder = Path(self.tmp.name)
         self.project = self.folder / "song.flp"
         self.project.write_bytes(b"FLhd")
+
+    def test_refuses_to_replace_an_existing_file(self):
+        output = self.folder / "a.wav"
+        output.write_bytes(b"old")
+        with self.assertRaisesRegex(render.RenderError, "already exists"):
+            render.render(self.project, output, running=lambda: False)
+        self.assertEqual(output.read_bytes(), b"old")
+
+    def test_overwrite_replaces_it(self):
+        output = self.folder / "a.wav"
+        output.write_bytes(b"old")
+        with mock.patch.dict(os.environ, {"FL_STUDIO_EXE": "FL64.exe"}):
+            render.render(self.project, output, overwrite=True, running=lambda: False, run=self.fake_run(2000))
+        self.assertEqual(output.stat().st_size, 2000)
+
+    def test_copy_stays_next_to_the_project_and_is_removed(self):
+        seen = []
+
+        def run(command, check, timeout):
+            seen.append(Path(command[-1]))
+            self.assertTrue(seen[0].exists())
+            Path(command[1][2:]).write_bytes(b"x" * 2000)
+            return types.SimpleNamespace(returncode=0)
+
+        with mock.patch.dict(os.environ, {"FL_STUDIO_EXE": "FL64.exe"}):
+            render.render(self.project, self.folder / "a.wav", running=lambda: False, run=run)
+        self.assertEqual(seen[0].parent, self.project.parent)
+        self.assertFalse(seen[0].exists())
+
+    def test_copy_is_removed_when_fl_hangs(self):
+        def run(command, check, timeout):
+            raise subprocess.TimeoutExpired(command, timeout)
+
+        with mock.patch.dict(os.environ, {"FL_STUDIO_EXE": "FL64.exe"}), self.assertRaises(render.RenderError):
+            render.render(self.project, self.folder / "a.wav", running=lambda: False, run=run)
+        self.assertEqual([p.name for p in self.folder.iterdir()], ["song.flp"])
 
     def test_refuses_when_fl_is_open(self):
         with self.assertRaisesRegex(render.RenderError, "open"):
@@ -417,7 +515,15 @@ class Server(unittest.TestCase):
 
     def test_notes_are_checked_before_queueing(self):
         with self.assertRaisesRegex(ValueError, "note 0"):
-            self.server.fl_queue_notes([{"pitch": 200, "start": 0, "length": 1}], 0)
+            self.server.fl_queue_notes([{"pitch": 200, "start": 0, "length": 1}], "abc")
+
+    def test_short_pattern_clears_the_rest_of_the_row(self):
+        with mock.patch.object(client, "call", return_value={}) as call:
+            self.server.fl_channel_steps(0, "1010")
+        steps = call.call_args.args[1]["steps"]
+        self.assertEqual(len(steps), 64)
+        self.assertEqual(steps[:5], [True, False, True, False, False])
+        self.assertFalse(any(steps[4:]))
 
     def test_steps_are_checked_before_sending(self):
         with self.assertRaises(ValueError):

@@ -5,6 +5,7 @@ pianoroll_done.json next to this file instead of showing a message box, because
 an open box makes mixer calls fail with "Operation unsafe at current time".
 """
 
+import hashlib
 import json
 import os
 
@@ -19,21 +20,32 @@ def ticks(beats):
     return int(round(float(beats) * flp.score.PPQ))
 
 
+def fingerprint():
+    """Hash the notes, since two channels can hold the same number of them."""
+    notes = (flp.score.getNote(i) for i in range(flp.score.noteCount))
+    rows = sorted((n.number, n.time, n.length, round(n.velocity, 3)) for n in notes)
+    return hashlib.sha256(repr(rows).encode()).hexdigest()[:16]
+
+
 def add_notes(payload):
+    # Built first, so a bad note stops the action before anything reaches the score.
+    prepared = []
     for item in payload["notes"]:
         note = flp.Note()
         note.number = int(item["pitch"])
         note.time = ticks(item["start"])
         note.length = ticks(item["length"])
         note.velocity = float(item.get("velocity", 0.8))
+        prepared.append(note)
+    for note in prepared:
         flp.score.addNote(note)
-    return {"added": len(payload["notes"])}
+    return {"added": len(prepared), "fingerprint": fingerprint()}
 
 
 def clear(payload):
     count = flp.score.noteCount
     flp.score.clearNotes(True)
-    return {"removed": count}
+    return {"removed": count, "fingerprint": fingerprint()}
 
 
 def read(payload):
@@ -47,7 +59,7 @@ def read(payload):
             "length": note.length / ppq,
             "velocity": round(note.velocity, 3),
         })
-    return {"notes": notes}
+    return {"notes": notes, "fingerprint": fingerprint()}
 
 
 ACTIONS = {"add_notes": add_notes, "clear": clear, "read": read}
@@ -61,10 +73,10 @@ def main():
         return
     done = {"id": item.get("id"), "ok": True}
     try:
-        expected = item.get("expect_notes")
-        if expected is not None and flp.score.noteCount != expected:
-            # The piano roll can't say which channel it shows, so a different count stops a write to the wrong one.
-            raise ValueError("expected " + str(expected) + " notes, found " + str(flp.score.noteCount))
+        expected = item.get("expect")
+        if expected is not None and fingerprint() != expected:
+            # The piano roll can't say which channel it shows, so other notes stop a write to the wrong one.
+            raise ValueError("expected fingerprint " + expected + ", found " + fingerprint())
         done["result"] = ACTIONS[item["action"]](item.get("payload", {}))
     except Exception as exc:
         done = {"id": item.get("id"), "ok": False, "error": type(exc).__name__ + ": " + str(exc)}

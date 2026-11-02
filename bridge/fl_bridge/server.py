@@ -137,10 +137,13 @@ def fl_channel_set(
 
 @server.tool()
 def fl_channel_steps(channel: int, pattern: str) -> dict:
-    """Write the step sequencer of the current pattern. pattern is a string of 0 and 1, one per 16th note."""
+    """Replace the step sequencer row of the current pattern. pattern has a 0 or 1 for each 16th note.
+
+    Every step past the end of pattern is turned off, so a short pattern doesn't leave old steps behind.
+    """
     if not re.fullmatch(r"[01]{1,64}", pattern):
         raise ValueError("pattern must be 1 to 64 characters of 0 and 1")
-    return client.call("channel_steps", {"channel": channel, "steps": [c == "1" for c in pattern]})
+    return client.call("channel_steps", {"channel": channel, "steps": [c == "1" for c in pattern.ljust(64, "0")]})
 
 
 @server.tool()
@@ -199,12 +202,12 @@ def fl_pad_map(channel: int) -> list:
 
 
 @server.tool()
-def fl_queue_notes(notes: list[dict], expect_notes: int) -> dict:
+def fl_queue_notes(notes: list[dict], expect: str) -> dict:
     """Queue notes for the ClaudeBridge piano roll script.
 
-    Each note has pitch (0-127), start and length in beats, and velocity from 0 to 1. expect_notes is how many
-    notes the target channel has now, from fl_queue_read. The script refuses if the piano roll shows another
-    count, because FL gives no way to read which channel it's showing.
+    Each note has pitch (0-127), start and length in beats, and velocity from 0 to 1. expect is the fingerprint
+    of the target channel, from fl_queue_read. The script refuses if the piano roll holds other notes, because
+    FL gives no way to read which channel it's showing.
     """
     for i, note in enumerate(notes):
         if not 0 <= int(note["pitch"]) <= 127 or float(note["start"]) < 0 or float(note["length"]) <= 0:
@@ -212,21 +215,27 @@ def fl_queue_notes(notes: list[dict], expect_notes: int) -> dict:
         if not 0 <= float(note.get("velocity", 0.8)) <= 1:
             raise ValueError(f"note {i} has a velocity outside 0 to 1")
     return {
-        "request": client.queue_piano_roll("add_notes", {"notes": notes}, expect_notes),
+        "request": client.queue_piano_roll("add_notes", {"notes": notes}, expect),
         "next": "run ClaudeBridge in the piano roll",
     }
 
 
 @server.tool()
-def fl_queue_clear(expect_notes: int) -> dict:
+def fl_queue_clear(expect: str) -> dict:
     """Queue removing every note from the open piano roll. Ctrl+Z in FL undoes it.
 
-    expect_notes works as in fl_queue_notes.
+    expect works as in fl_queue_notes.
     """
     return {
-        "request": client.queue_piano_roll("clear", expect_notes=expect_notes),
+        "request": client.queue_piano_roll("clear", expect=expect),
         "next": "run ClaudeBridge in the piano roll",
     }
+
+
+@server.tool()
+def fl_queue_discard() -> dict:
+    """Drop a queued action that didn't run. Other queue tools refuse while one is waiting."""
+    return {"discarded": client.discard_piano_roll()}
 
 
 @server.tool()
@@ -258,9 +267,12 @@ def fl_piano_roll_run(channel: int, request: str) -> dict:
 
 
 @server.tool()
-def fl_render(project: str, output: str) -> dict:
-    """Render a saved .flp to a WAV with FL closed. FL opens by itself, exports and closes."""
-    return {"output": output, "bytes": render.render(project, output)}
+def fl_render(project: str, output: str, overwrite: bool = False) -> dict:
+    """Render a saved .flp to a WAV with FL closed. FL opens by itself, exports and closes.
+
+    An existing output is refused unless overwrite is true.
+    """
+    return {"output": output, "bytes": render.render(project, output, overwrite=overwrite)}
 
 
 def main():

@@ -79,7 +79,8 @@ the mixer track and slot goes from 0 to 9.
 - A piano roll that is already open keeps its channel when another one is selected. Select the channel, hide the
   window, and show it in a later request.
 - The caption can't prove the channel. FL draws the name itself, so `ui.getFocusedFormCaption()` and Windows both
-  return `Piano roll -`. Compare a known note count before writing, which was right on 10 of 10 alternating reads.
+  return `Piano roll -`. Compare the existing notes before writing. Comparing note counts was right on 10 of 10
+  alternating reads, but two channels can share a count, so a hash of the notes is safer.
 - Nothing in the API starts a piano roll script. Ctrl+Alt+Y runs the last one again, after a first run from
   Tools > Scripts in that session, and the keys need FL as the active window.
 
