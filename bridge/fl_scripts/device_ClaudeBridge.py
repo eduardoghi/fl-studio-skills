@@ -106,6 +106,16 @@ def _named_params(index, slot):
             yield i, name
 
 
+def _is_placeholder(name):
+    """Recognize unassigned VST slots such as `Param 12` and `5. `, and the MIDI entries FL adds to every VST."""
+    name = name.strip()
+    if name.startswith("MIDI CC #") or (name.startswith("MIDI Channel ") and name.endswith(" Aftertouch")):
+        return True
+    if name.endswith(".") and name[:-1].isdigit():
+        return True
+    return name.startswith("Param ") and name[6:].isdigit()
+
+
 def _param_row(i, name, index, slot):
     return {
         "name": name,
@@ -271,6 +281,8 @@ def _h_channel_set(params):
         channels.muteChannel(channel)
     if params.get("track") is not None:
         channels.setTargetFxTrack(channel, int(params["track"]))
+    if params.get("name") is not None:
+        channels.setChannelName(channel, str(params["name"]))
     return _channel_row(channel)
 
 
@@ -312,11 +324,15 @@ def _h_plugin_params(params):
     index, slot = _target(params)
     _require_plugin(index, slot)
     needle = (params.get("contains") or "").lower()
-    rows = [_param_row(i, n, index, slot) for i, n in _named_params(index, slot) if needle in n.lower()]
+    found = [(i, n) for i, n in _named_params(index, slot) if needle in n.lower()]
+    shown = found
+    if params.get("named_only", True):
+        shown = [(i, n) for i, n in found if not _is_placeholder(n)]
     return {
         "plugin": plugins.getPluginName(index, slot),
-        "count": len(rows),
-        "params": rows[: int(params.get("limit", 200))],
+        "count": len(shown),
+        "hidden": len(found) - len(shown),
+        "params": [_param_row(i, n, index, slot) for i, n in shown[: int(params.get("limit", 200))]],
     }
 
 

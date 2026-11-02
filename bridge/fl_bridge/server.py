@@ -129,10 +129,14 @@ def fl_channel_set(
     pan: float | None = None,
     muted: bool | None = None,
     track: int | None = None,
+    name: str | None = None,
 ) -> dict:
     """Change a channel and return its state as FL reports it. track is the mixer track it feeds."""
-    client.call("channel_set", {"channel": channel, "volume": volume, "pan": pan, "muted": muted, "track": track})
-    return client.settled("channel_get", {"channel": channel}, {"muted": muted, "track": track})
+    client.call(
+        "channel_set",
+        {"channel": channel, "volume": volume, "pan": pan, "muted": muted, "track": track, "name": name},
+    )
+    return client.settled("channel_get", {"channel": channel}, {"muted": muted, "track": track, "name": name})
 
 
 @server.tool()
@@ -159,10 +163,17 @@ def fl_plugin_params(
     slot: int | None = None,
     contains: str | None = None,
     limit: int = 200,
+    named_only: bool = True,
 ) -> dict:
-    """List a plugin's named parameters. Pass channel for an instrument, or track and slot for an effect."""
+    """List a plugin's named parameters. Pass channel for an instrument, or track and slot for an effect.
+
+    named_only drops slots VSTs leave unassigned, such as Param 12, and the MIDI CC and aftertouch entries FL adds.
+    hidden counts what it dropped. Pass False to reach them, for example to find a CC of a Kontakt instrument.
+    """
     return client.call(
-        "plugin_params", {**_target(channel, track, slot), "contains": contains, "limit": limit}, timeout=20
+        "plugin_params",
+        {**_target(channel, track, slot), "contains": contains, "limit": limit, "named_only": named_only},
+        timeout=20,
     )
 
 

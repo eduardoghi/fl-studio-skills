@@ -26,6 +26,9 @@ It depends on the MCP SDK only. The MIDI message goes straight through `winmm`.
 5. Run Tools > Scripts > ClaudeBridge once from any piano roll. `fl_piano_roll_run` repeats the last script with
    Ctrl+Alt+Y, which FL only enables after the first run of the session.
 
+After changing a file in `fl_scripts`, run `install.py` again and reload the script in FL. A running script keeps the
+old code, so a new parameter such as `name` in `fl_channel_set` fails its read back until then.
+
 ## What it can't do
 
 - Load a plugin, create a channel, save the project or edit the Playlist. FL's scripting API offers none of these.

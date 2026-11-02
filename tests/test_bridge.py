@@ -31,6 +31,7 @@ class FakeFL:
     def __init__(self):
         self.params = [("?", 0.0), ("Reverb size", 0.4), ("Reverb decay", 0.5), ("Mix", 0.2), ("mix ", 0.3)]
         self.grid = {}
+        self.names = {}
         self.muted = {6: False}
         self.playing = False
 
@@ -58,7 +59,14 @@ class FakeFL:
             muteTrack=lambda t: fl.muted.__setitem__(t, not fl.muted.get(t, False)),
         )
         channels = types.SimpleNamespace(
-            channelCount=lambda: 2, setGridBit=lambda c, p, v: fl.grid.__setitem__((c, p), v)
+            channelCount=lambda: 2,
+            setGridBit=lambda c, p, v: fl.grid.__setitem__((c, p), v),
+            setChannelName=lambda c, name: fl.names.__setitem__(c, name),
+            getChannelName=lambda c: fl.names.get(c, f"Channel {c}"),
+            getChannelVolume=lambda c: 0.78,
+            getChannelPan=lambda c: 0.0,
+            isChannelMuted=lambda c: False,
+            getTargetFxTrack=lambda c: 0,
         )
         transport = types.SimpleNamespace(
             isPlaying=lambda: fl.playing, start=lambda: setattr(fl, "playing", True), stop=lambda: None
@@ -136,6 +144,39 @@ class DeviceScript(unittest.TestCase):
     def test_plugin_params_skips_empty_slots(self):
         result = self.ask("plugin_params", {"track": 9, "slot": 2, "contains": "reverb"})["result"]
         self.assertEqual([p["name"] for p in result["params"]], ["Reverb size", "Reverb decay"])
+
+    def test_plugin_params_hides_placeholders_and_counts_them(self):
+        self.fl.params = [
+            ("Level (p1)", 0.7),
+            ("Param 8", 0.1),
+            ("5. ", 0.0),
+            ("MIDI CC #1 (Modulation wheel)", 0.0),
+            ("MIDI Channel 1 Aftertouch", 0.0),
+        ]
+        result = self.ask("plugin_params", {"track": 9, "slot": 2})["result"]
+        self.assertEqual([p["name"] for p in result["params"]], ["Level (p1)"])
+        self.assertEqual((result["count"], result["hidden"]), (1, 4))
+
+    def test_plugin_params_can_show_placeholders(self):
+        self.fl.params = [("Level (p1)", 0.7), ("MIDI CC #1 (Modulation wheel)", 0.0)]
+        result = self.ask("plugin_params", {"track": 9, "slot": 2, "contains": "cc #1", "named_only": False})["result"]
+        self.assertEqual([p["name"] for p in result["params"]], ["MIDI CC #1 (Modulation wheel)"])
+        self.assertEqual(result["hidden"], 0)
+
+    def test_placeholder_check_keeps_real_names(self):
+        for name in ("1. Bleed - OH", "Param Link", "Level (p1)", "Mix"):
+            with self.subTest(name=name):
+                self.assertFalse(self.device._is_placeholder(name))
+
+    def test_limit_applies_after_hiding_placeholders(self):
+        self.fl.params = [("Param 1", 0.0), ("Param 2", 0.0), ("Mix", 0.2)]
+        result = self.ask("plugin_params", {"track": 9, "slot": 2, "limit": 1})["result"]
+        self.assertEqual([p["name"] for p in result["params"]], ["Mix"])
+
+    def test_channel_set_renames_a_channel(self):
+        answer = self.ask("channel_set", {"channel": 1, "name": "Pad"})
+        self.assertEqual(self.fl.names[1], "Pad")
+        self.assertEqual(answer["result"]["name"], "Pad")
 
     def test_missing_plugin_is_reported(self):
         self.assertIn("no plugin", self.ask("plugin_params", {"track": 3, "slot": 0})["error"])
@@ -524,6 +565,21 @@ class Server(unittest.TestCase):
         self.assertEqual(len(steps), 64)
         self.assertEqual(steps[:5], [True, False, True, False, False])
         self.assertFalse(any(steps[4:]))
+
+    def test_plugin_params_hides_placeholders_unless_asked(self):
+        with mock.patch.object(client, "call", return_value={}) as call:
+            self.server.fl_plugin_params(channel=3)
+            self.assertTrue(call.call_args.args[1]["named_only"])
+            self.server.fl_plugin_params(channel=3, named_only=False)
+            self.assertFalse(call.call_args.args[1]["named_only"])
+
+    def test_channel_rename_is_read_back(self):
+        with (
+            mock.patch.object(client, "call", return_value={"name": "Old", "muted": False, "track": 0}),
+            mock.patch.object(client, "SETTLE_S", 0),
+            self.assertRaisesRegex(client.BridgeError, "name='Old'"),
+        ):
+            self.server.fl_channel_set(0, name="New")
 
     def test_steps_are_checked_before_sending(self):
         with self.assertRaises(ValueError):
