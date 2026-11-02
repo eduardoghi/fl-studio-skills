@@ -11,6 +11,7 @@
 
 Reads 16, 24 and 32 bit PCM and 32 bit float WAV files. Needs numpy.
 """
+
 import argparse
 import struct
 import sys
@@ -19,8 +20,25 @@ from pathlib import Path
 import numpy as np
 
 BANDS = ((20, 120), (120, 500), (500, 2000), (2000, 6000), (6000, 20000))
-NOTES = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6, "Gb": 6,
-         "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
+NOTES = {
+    "C": 0,
+    "C#": 1,
+    "Db": 1,
+    "D": 2,
+    "D#": 3,
+    "Eb": 3,
+    "E": 4,
+    "F": 5,
+    "F#": 6,
+    "Gb": 6,
+    "G": 7,
+    "G#": 8,
+    "Ab": 8,
+    "A": 9,
+    "A#": 10,
+    "Bb": 10,
+    "B": 11,
+}
 NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]
 
 
@@ -32,8 +50,8 @@ def read_wav(path):
     pos = 12
     fmt = raw = None
     while pos + 8 <= len(data):
-        chunk, size = struct.unpack("<4sI", data[pos:pos + 8])
-        body = data[pos + 8:pos + 8 + size]
+        chunk, size = struct.unpack("<4sI", data[pos : pos + 8])
+        body = data[pos + 8 : pos + 8 + size]
         if chunk == b"fmt ":
             fmt = body
         elif chunk == b"data":
@@ -73,7 +91,7 @@ def db(value):
 
 
 def rms(x):
-    return float(np.sqrt((x ** 2).mean())) if len(x) else 0.0
+    return float(np.sqrt((x**2).mean())) if len(x) else 0.0
 
 
 def band_shares(mono, rate):
@@ -96,7 +114,7 @@ def band_pass(sig, rate, lo, hi):
 
 
 def envelope(sig, win):
-    return np.array([rms(sig[i:i + win]) for i in range(0, max(len(sig) - win, 0), win)])
+    return np.array([rms(sig[i : i + win]) for i in range(0, max(len(sig) - win, 0), win)])
 
 
 def cmd_measure(args):
@@ -107,7 +125,9 @@ def cmd_measure(args):
         loudest = envelope(mono, win).max(initial=0)
         print(Path(path).name)
         print(f"  {len(x) / rate:.1f} s, {rate} Hz, {x.shape[1]} ch")
-        print(f"  peak {db(np.abs(x).max()):.1f} dBFS, RMS {db(rms(x)):.1f} dBFS, loudest passage {db(loudest):.1f} dBFS")
+        print(
+            f"  peak {db(np.abs(x).max()):.1f} dBFS, RMS {db(rms(x)):.1f} dBFS, loudest passage {db(loudest):.1f} dBFS"
+        )
         print(f"  {format_shares(band_shares(mono, rate))}")
 
 
@@ -115,13 +135,13 @@ def cmd_timeline(args):
     x, rate = read_wav(args.file)
     step = int(args.step * rate)
     for i in range(0, len(x), step):
-        print(f"{i / rate:7.1f} s  {db(np.abs(x[i:i + step]).max()):6.1f} dBFS")
+        print(f"{i / rate:7.1f} s  {db(np.abs(x[i : i + step]).max()):6.1f} dBFS")
 
 
 def cmd_noise(args):
     x, rate = read_wav(args.file)
     end = int(args.end * rate) if args.end is not None else len(x)
-    seg = x[int(args.start * rate):end]
+    seg = x[int(args.start * rate) : end]
     if len(seg) < rate // 4:
         sys.exit("the passage is shorter than 0.25 s")
     mono = seg.mean(axis=1)
@@ -159,8 +179,10 @@ def cmd_thumps(args):
             continue
         found += 1
         at = (i + 0.5) * win / rate / beat
-        print(f"beat {at:6.2f}, bar {int(at // args.beats_per_bar) + 1}, low {db(low[i + 1]):.1f} dBFS, "
-              f"{difference:.1f} dB above the midrange")
+        print(
+            f"beat {at:6.2f}, bar {int(at // args.beats_per_bar) + 1}, low {db(low[i + 1]):.1f} dBFS, "
+            f"{difference:.1f} dB above the midrange"
+        )
     if not found:
         print(f"no low attack stands {args.min_difference:g} dB above the midrange")
 
@@ -191,17 +213,19 @@ def cmd_chords(args):
             name, start, end, expected = parse_passage(text)
         except (KeyError, ValueError):
             sys.exit(f"bad passage {text!r}, use NAME:START-END:NOTE,NOTE with beats and names like F# or Bb")
-        chroma = pitch_classes(mono[int(start * beat * rate):int(end * beat * rate)], rate)
+        chroma = pitch_classes(mono[int(start * beat * rate) : int(end * beat * rate)], rate)
         order = np.argsort(chroma)[::-1]
-        strongest = {int(i) for i in order[:len(expected)]}
+        strongest = {int(i) for i in order[: len(expected)]}
         missing = expected - strongest
         extra = strongest - expected
         bad += bool(missing)
         status = "ok" if not missing else "DIFFERS"
-        print(f"{name:8} beats {start:g}-{end:g}  {status}  strongest "
-              f"{' '.join(NAMES[i] for i in order[:len(expected)])}"
-              + (f"  missing {' '.join(NAMES[i] for i in sorted(missing))}" if missing else "")
-              + (f"  extra {' '.join(NAMES[i] for i in sorted(extra))}" if extra else ""))
+        print(
+            f"{name:8} beats {start:g}-{end:g}  {status}  strongest "
+            f"{' '.join(NAMES[i] for i in order[: len(expected)])}"
+            + (f"  missing {' '.join(NAMES[i] for i in sorted(missing))}" if missing else "")
+            + (f"  extra {' '.join(NAMES[i] for i in sorted(extra))}" if extra else "")
+        )
     return 1 if bad else 0
 
 
@@ -214,8 +238,10 @@ def cmd_width(args):
         mid = (x[:, 0] + x[:, 1]) / 2
         side = (x[:, 0] - x[:, 1]) / 2
         corr = 1.0 if rms(side) == 0 else float(np.corrcoef(x[:, 0], x[:, 1])[0, 1])
-        print(f"{Path(path).name}: correlation {corr:.2f}, side minus mid {db(rms(side)) - db(rms(mid)):.1f} dB, "
-              f"left minus right {db(rms(x[:, 0])) - db(rms(x[:, 1])):.1f} dB")
+        print(
+            f"{Path(path).name}: correlation {corr:.2f}, side minus mid {db(rms(side)) - db(rms(mid)):.1f} dB, "
+            f"left minus right {db(rms(x[:, 0])) - db(rms(x[:, 1])):.1f} dB"
+        )
 
 
 def cmd_match(args):
@@ -224,9 +250,9 @@ def cmd_match(args):
     for path in args.files:
         x, rate = read_wav(path)
         if args.seconds is not None and len(x) > args.seconds * rate:
-            x = x[:int(args.seconds * rate)].copy()
+            x = x[: int(args.seconds * rate)].copy()
             fade = min(int(args.fade * rate), len(x))
-            x[len(x) - fade:] *= np.linspace(1, 0, fade)[:, None]
+            x[len(x) - fade :] *= np.linspace(1, 0, fade)[:, None]
         if args.rms is not None:
             gain = 10 ** (args.rms / 20) / max(rms(x), 1e-12)
         else:

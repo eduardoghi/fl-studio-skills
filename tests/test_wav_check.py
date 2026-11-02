@@ -2,6 +2,7 @@
 
 Run with `python3 -m unittest discover -s tests`. Needs numpy.
 """
+
 import os
 import struct
 import subprocess
@@ -51,7 +52,7 @@ class WavCheck(unittest.TestCase):
         return path
 
     def run_tool(self, *args, code=0):
-        done = subprocess.run([sys.executable, WAV_CHECK, *args], capture_output=True, text=True)
+        done = subprocess.run([sys.executable, WAV_CHECK, *args], check=False, capture_output=True, text=True)
         self.assertEqual(done.returncode, code, done.stderr + done.stdout)
         return done.stdout
 
@@ -85,7 +86,7 @@ class WavCheck(unittest.TestCase):
         x = tone(1000, 8, amp=0.02)
         hit = tone(90, 0.12, amp=0.6) * np.linspace(1, 0, int(0.12 * RATE))
         at = int(4 * 60 / 95 * RATE)
-        x[at:at + len(hit)] += hit
+        x[at : at + len(hit)] += hit
         out = self.run_tool("thumps", self.write("a.wav", x), "--bpm", "95")
         self.assertIn("bar 2", out)
 
