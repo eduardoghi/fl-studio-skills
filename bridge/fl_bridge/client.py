@@ -12,6 +12,7 @@ from . import doorbell, paths
 POLL_S = 0.02
 SETTLE_S = 0.2
 LOCK_TIMEOUT_S = 15.0
+FOCUS_TRIES = 3
 
 _thread_lock = threading.Lock()
 
@@ -122,17 +123,22 @@ def focus_piano_roll(channel, command=None, sleep=time.sleep):
     changes after each call returns, so each step needs its own request. FL
     draws the channel name itself: the caption reads "Piano roll -" to both its
     API and Windows, so this can't prove which channel opened. Writes prove it
-    with a fingerprint of the notes they expect to find.
+    with a fingerprint of the notes they expect to find. Hiding comes first and
+    on its own, since FL puts the selection back on the piano roll's channel if
+    both happen in one call.
     """
     command = command or call
-    command("channel_select", {"channel": channel})
-    sleep(SETTLE_S)
-    command("piano_roll_show")
-    sleep(SETTLE_S)
-    state = command("focus_state")
-    if state["selected"] != channel or not state["piano_roll_focused"] or not state["caption"].startswith("Piano roll"):
-        raise BridgeError(f"the piano roll of channel {channel} didn't open: {state}")
-    return state
+    for _ in range(FOCUS_TRIES):
+        command("piano_roll_hide")
+        sleep(SETTLE_S)
+        command("channel_select", {"channel": channel})
+        sleep(SETTLE_S)
+        command("piano_roll_show")
+        sleep(SETTLE_S)
+        state = command("focus_state")
+        if state["selected"] == channel and state["piano_roll_focused"] and state["caption"].startswith("Piano roll"):
+            return state
+    raise BridgeError(f"the piano roll of channel {channel} didn't open: {state}")
 
 
 def settled(command, params, check=None, sleep=time.sleep):

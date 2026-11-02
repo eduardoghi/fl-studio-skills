@@ -1,16 +1,19 @@
 """MCP tools for controlling FL Studio from Claude Code."""
 
 import re
+import time
 
 from mcp.server.fastmcp import FastMCP
 
-from . import client, hotkey, render
+from . import client, render, window
 
 server = FastMCP(
     "fl-bridge",
     instructions=(
-        "Controls the project open in FL Studio. Every change is read back from FL. Plugins can't be loaded and "
-        "nothing is saved from here. Piano roll actions are queued and need the ClaudeBridge script to run."
+        "Controls the project open in FL Studio. Every change is read back from FL. Nothing here takes the keyboard "
+        "focus or moves the mouse, so FL can stay behind other windows, but not minimized when the tool needs its "
+        "panels. Menus and dialogs still appear on screen. Nothing is saved from here. Piano roll actions are queued "
+        "and need the ClaudeBridge script to run."
     ),
 )
 
@@ -21,6 +24,17 @@ def _target(channel, track, slot):
     if track is None or slot is None:
         raise ValueError("pass channel for an instrument, or track and slot for a mixer effect")
     return {"track": track, "slot": slot}
+
+
+def _loaded_channel(tries=40, sleep=time.sleep):
+    """Return the last channel once its plugin finished opening. Until then FL reports only its wrapper."""
+    row = client.call("channel_list", timeout=10)[-1]
+    for _ in range(tries):
+        if row["plugin"] != "Fruity Wrapper":
+            break
+        sleep(0.25)
+        row = client.call("channel_list", timeout=10)[-1]
+    return row
 
 
 def rgb(color):
@@ -264,17 +278,77 @@ def fl_piano_roll_result(request: str) -> dict:
 
 @server.tool()
 def fl_piano_roll_run(channel: int, request: str) -> dict:
-    """Apply a queued action to a channel without clicking, by pressing FL's Ctrl+Alt+Y.
+    """Apply a queued action to a channel by posting Ctrl+Alt+Y to the piano roll, without taking the focus.
 
     The shortcut repeats the last piano roll script, so ClaudeBridge must have been the last one run from
-    Tools > Scripts in this FL session. It sends keys, so it refuses to run unless FL is the active window.
+    Tools > Scripts in this FL session. Open that menu with fl_click and fl_menu_keys, and check the highlighted
+    row with fl_capture before pressing enter, since another script would run instead.
     """
     client.focus_piano_roll(channel)
-    hotkey.run_last_script()
+    window.run_last_script()
     result = client.piano_roll_result(request, timeout=3)
     if result is None:
         raise ValueError("ClaudeBridge didn't run. Start it once from Tools > Scripts in the piano roll")
     return result
+
+
+@server.tool()
+def fl_capture(folder: str | None = None, region: list[int] | None = None) -> list:
+    """Save PNGs of FL's main window and any open menu, without touching the screen, and return their paths.
+
+    Works behind other windows, not while minimized. region is [x, y, width, height] in the main window, for reading
+    small controls. Pixels in the main capture are the coordinates fl_click takes, unless a region was cut.
+    """
+    return window.capture(folder, tuple(region) if region else None)
+
+
+@server.tool()
+def fl_click(x: int, y: int, button: str = "left") -> dict:
+    """Click a point of the main window without moving the mouse. button is left or right.
+
+    x and y come from an fl_capture of the whole window. A click on the Playlist grid paints a clip, and a click on a
+    menu item only closes the menu, so use fl_menu_keys there.
+    """
+    return window.click(x, y, button)
+
+
+@server.tool()
+def fl_scroll(x: int, y: int, notches: int) -> dict:
+    """Turn the mouse wheel over a point of the main window. Negative notches scroll down."""
+    return window.scroll(x, y, notches)
+
+
+@server.tool()
+def fl_menu_keys(keys: list[str]) -> dict:
+    """Send keys to the open menu. The keys are down, up, left, right, enter and escape.
+
+    Disabled rows are skipped, so counts change with the state of the project. Check the highlighted row with
+    fl_capture before sending enter. These menus appear above other programs.
+    """
+    return window.menu_keys(keys)
+
+
+@server.tool()
+def fl_load_plugin(x: int, y: int) -> dict:
+    """Open the plugin at a row of the browser in a new channel, and return that channel.
+
+    x and y come from fl_capture. Another kind of row is refused. The new channel feeds the Master, so point it at a
+    mixer track with fl_channel_set.
+    """
+    window.load_plugin(x, y, lambda: client.call("project")["channels"])
+    return _loaded_channel()
+
+
+@server.tool()
+def fl_export(output: str, overwrite: bool = False) -> dict:
+    """Export the project open in FL to a WAV, from memory, with FL staying open and behind other windows.
+
+    output is an absolute path. An existing file is refused unless overwrite is true. Song mode exports the
+    arrangement and pattern mode the current pattern, and song_mode in the answer says which. The save dialog and
+    the render dialog appear on screen for a moment.
+    """
+    song_mode = client.call("project")["song_mode"]
+    return {"output": output, "bytes": window.export_wav(output, overwrite), "song_mode": song_mode}
 
 
 @server.tool()

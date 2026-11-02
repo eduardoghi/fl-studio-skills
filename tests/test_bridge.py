@@ -6,6 +6,7 @@ Run with `python3 -m unittest discover -s tests`. The server tools need the mcp 
 import importlib.util
 import json
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -13,13 +14,14 @@ import threading
 import time
 import types
 import unittest
+import zlib
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bridge"))
 
-from fl_bridge import client, doorbell, hotkey, paths, render
+from fl_bridge import client, doorbell, paths, render, window
 
 SCRIPTS = ROOT / "bridge" / "fl_scripts"
 NOTE = {"pitch": 60, "start": 0, "length": 1}
@@ -281,7 +283,8 @@ class PianoRollScript(unittest.TestCase):
 
 class Client(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        # Windows can keep the lock file busy for a moment after the process holding it is killed.
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self.tmp.cleanup)
         self.folder = Path(self.tmp.name)
         patcher = mock.patch.dict(
@@ -337,7 +340,7 @@ class Client(unittest.TestCase):
 
     def test_focus_uses_separate_requests(self):
         calls, _ = self.focus("Piano roll - Guitar")
-        self.assertEqual(calls, ["channel_select", "piano_roll_show", "focus_state"])
+        self.assertEqual(calls, ["piano_roll_hide", "channel_select", "piano_roll_show", "focus_state"])
 
     def test_focus_accepts_the_caption_fl_really_reports(self):
         self.focus("Piano roll -")
@@ -345,6 +348,17 @@ class Client(unittest.TestCase):
     def test_focus_refuses_when_another_channel_is_selected(self):
         with self.assertRaisesRegex(client.BridgeError, "didn't open"):
             self.focus("Piano roll -", selected=3)
+
+    def test_focus_tries_again_when_the_selection_misses(self):
+        answers = iter([{"selected": 3}, {"selected": 9}])
+
+        def command(name, params=None):
+            if name != "focus_state":
+                return {}
+            return {**next(answers), "piano_roll_focused": True, "caption": "Piano roll -"}
+
+        state = client.focus_piano_roll(9, command=command, sleep=lambda _: None)
+        self.assertEqual(state["selected"], 9)
 
     def test_focus_refuses_when_another_window_has_focus(self):
         with self.assertRaisesRegex(client.BridgeError, "didn't open"):
@@ -435,16 +449,59 @@ class Doorbell(unittest.TestCase):
             doorbell.find_port(["Microsoft GS"], "FL MCP")
 
 
-class Hotkey(unittest.TestCase):
+class Window(unittest.TestCase):
     def test_only_fl_processes_count(self):
-        self.assertTrue(hotkey.is_fl(r"C:\Program Files\Image-Line\FL Studio 2026\FL64.exe"))
-        self.assertFalse(hotkey.is_fl(r"C:\Windows\explorer.exe"))
-        self.assertFalse(hotkey.is_fl(""))
+        self.assertTrue(window.is_fl(r"C:\Program Files\Image-Line\FL Studio 2026\FL64.exe"))
+        self.assertFalse(window.is_fl(r"C:\Windows\explorer.exe"))
+        self.assertFalse(window.is_fl(""))
 
-    def test_keys_are_released_in_reverse_order(self):
-        sequence = hotkey.key_sequence()
-        self.assertEqual([key for key, released in sequence if not released], [0x11, 0x12, 0x59])
-        self.assertEqual([key for key, released in sequence if released], [0x59, 0x12, 0x11])
+    def test_click_param_keeps_negative_coordinates(self):
+        self.assertEqual(window.click_param(135, 629), (629 << 16) | 135)
+        self.assertEqual(window.click_param(-1, 0), 0xFFFF)
+
+    def test_key_param_marks_alt_and_release(self):
+        self.assertEqual(window.key_param(0x15, False, False), 0x00150001)
+        self.assertEqual(window.key_param(0x15, True, False), 0x20150001)
+        self.assertEqual(window.key_param(0x15, False, True), 0xC0150001)
+
+    def test_alt_shortcuts_use_system_key_messages(self):
+        self.assertEqual(window.key_message(True, False), window.WM_SYSKEYDOWN)
+        self.assertEqual(window.key_message(True, True), window.WM_SYSKEYUP)
+        self.assertEqual(window.key_message(False, False), window.WM_KEYDOWN)
+
+    def test_wheel_param_is_signed(self):
+        self.assertEqual(window.wheel_param(1), 120 << 16)
+        self.assertEqual(window.wheel_param(-1), (0x10000 - 120) << 16)
+
+    def test_unknown_menu_key_is_refused(self):
+        self.assertEqual(window.menu_key("down"), window.VK_DOWN)
+        with self.assertRaisesRegex(window.WindowError, "unknown menu key"):
+            window.menu_key("space")
+
+    def test_dialog_is_centered_on_fl(self):
+        self.assertEqual(window.centered((207, 21, 2777, 1240), (433, 611)), (1379, 335))
+
+    def test_points_follow_the_bottom_right_of_a_larger_form(self):
+        self.assertEqual(window.scaled((290, 587), (433, 611)), (290, 587))
+        self.assertEqual(window.scaled((290, 587), (450, 630)), (307, 606))
+
+    def test_crop_returns_the_asked_pixels(self):
+        pixels = bytes(range(24))  # Two rows of three BGRA pixels.
+        cut, width, height = window.crop(pixels, 3, 2, (1, 1, 2, 1))
+        self.assertEqual((width, height), (2, 1))
+        self.assertEqual(cut, bytes(range(16, 24)))
+
+    def test_crop_refuses_a_region_outside_the_image(self):
+        with self.assertRaisesRegex(window.WindowError, "outside"):
+            window.crop(bytes(16), 2, 2, (5, 0, 1, 1))
+
+    def test_png_holds_the_pixels_in_rgb(self):
+        png = window.encode_png(bytes([1, 2, 3, 255, 4, 5, 6, 255]), 2, 1)
+        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(struct.unpack(">II", png[16:24]), (2, 1))
+        start = png.index(b"IDAT") + 4
+        length = struct.unpack(">I", png[start - 8 : start - 4])[0]
+        self.assertEqual(zlib.decompress(png[start : start + length]), bytes([0, 3, 2, 1, 6, 5, 4]))
 
 
 class Render(unittest.TestCase):
@@ -580,6 +637,12 @@ class Server(unittest.TestCase):
             self.assertRaisesRegex(client.BridgeError, "name='Old'"),
         ):
             self.server.fl_channel_set(0, name="New")
+
+    def test_loaded_channel_waits_for_the_plugin_name(self):
+        rows = iter([[{"plugin": "Fruity Wrapper"}], [{"plugin": "Fruity Wrapper"}], [{"plugin": "Ample Guitar SC"}]])
+        with mock.patch.object(client, "call", side_effect=lambda *a, **k: next(rows)):
+            row = self.server._loaded_channel(sleep=lambda _: None)
+        self.assertEqual(row["plugin"], "Ample Guitar SC")
 
     def test_steps_are_checked_before_sending(self):
         with self.assertRaises(ValueError):

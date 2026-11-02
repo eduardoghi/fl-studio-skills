@@ -294,12 +294,17 @@ def _h_channel_steps(params):
     return {"channel": channel, "steps": len(params["steps"]), "pattern": patterns.patternNumber()}
 
 
+def _h_piano_roll_hide(params):
+    """Hide the piano roll, which keeps its old channel while it stays open."""
+    ui.hideWindow(midi.widPianoRoll)
+    return {}
+
+
 def _h_channel_select(params):
-    """Select a channel and hide the piano roll, which keeps its old channel while it stays open."""
+    # A separate request from the hide. Hiding in the same call put the selection back on the piano roll's channel.
     channel = int(params["channel"])
     _check_channel(channel)
     channels.selectOneChannel(channel)
-    ui.hideWindow(midi.widPianoRoll)
     return {"channel": channel}
 
 
@@ -391,6 +396,7 @@ HANDLERS = {
     "pattern_name": _h_pattern_name,
     "pattern_list": _h_pattern_list,
     "channel_select": _h_channel_select,
+    "piano_roll_hide": _h_piano_roll_hide,
     "piano_roll_show": _h_piano_roll_show,
     "focus_state": _h_focus_state,
     "mixer_get": lambda params: _track_row(int(params["track"])),
