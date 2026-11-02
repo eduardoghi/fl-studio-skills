@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Copy the bridge scripts into FL Studio's settings folder.
 
 Run it from anywhere, then pick 'Claude Bridge' as the controller type of the
