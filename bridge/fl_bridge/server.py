@@ -98,6 +98,25 @@ def fl_mixer_peaks(track: int | None = None) -> list:
 
 
 @server.tool()
+def fl_pattern_list(last: int = 8) -> dict:
+    """List patterns 1 to last with their names and lengths, and the current one."""
+    return client.call("pattern_list", {"last": last})
+
+
+@server.tool()
+def fl_pattern_select(index: int) -> dict:
+    """Make a pattern current. Notes and steps go to the current pattern."""
+    client.call("pattern_select", {"index": index})
+    return client.settled("pattern_list", {"last": index})
+
+
+@server.tool()
+def fl_pattern_name(index: int, name: str) -> dict:
+    """Rename a pattern."""
+    return client.call("pattern_name", {"index": index, "name": name})
+
+
+@server.tool()
 def fl_channel_list() -> list:
     """List Channel Rack channels with their instrument and mixer track."""
     return client.call("channel_list", timeout=10)

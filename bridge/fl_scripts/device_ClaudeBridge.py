@@ -233,6 +233,29 @@ def _check_channel(channel):
         raise ValueError("no channel " + str(channel))
 
 
+def _h_pattern_select(params):
+    index = int(params["index"])
+    if not 1 <= index <= patterns.patternMax():
+        raise ValueError("no pattern " + str(index))
+    patterns.jumpToPattern(index)
+    return {}
+
+
+def _h_pattern_name(params):
+    patterns.setPatternName(int(params["index"]), str(params["name"]))
+    return {"name": patterns.getPatternName(int(params["index"]))}
+
+
+def _h_pattern_list(params):
+    return {
+        "current": patterns.patternNumber(),
+        "patterns": [
+            {"index": i, "name": patterns.getPatternName(i), "length": patterns.getPatternLength(i)}
+            for i in range(1, int(params.get("last", 8)) + 1)
+        ],
+    }
+
+
 def _h_channel_list(params):
     return [_channel_row(c) for c in range(channels.channelCount())]
 
@@ -348,6 +371,9 @@ HANDLERS = {
     "channel_list": _h_channel_list,
     "channel_set": _h_channel_set,
     "channel_steps": _h_channel_steps,
+    "pattern_select": _h_pattern_select,
+    "pattern_name": _h_pattern_name,
+    "pattern_list": _h_pattern_list,
     "channel_select": _h_channel_select,
     "piano_roll_show": _h_piano_roll_show,
     "focus_state": _h_focus_state,
