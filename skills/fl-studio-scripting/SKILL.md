@@ -53,11 +53,42 @@ Reload the script from View > Script output after replacing the file. A running 
 
 - While a script message box is open, calling `mixer.setTrackVolume` raises
   `RuntimeError: Operation unsafe at current time`. Close the dialog and retry.
+- FL applies mute, solo and window changes after the call returns. `isTrackMuted` read in the same call returns the
+  old value, so read it in a later request. Showing a window right after hiding it in one call has the same problem.
 - Soloing a track makes the others report as muted. Read `isTrackMuted` after clearing the solo, not before.
-- Piano roll scripts have no API to start them, so someone has to run them from Tools > Scripts in the piano
-  roll of the target channel. Confirm the channel in the window title first, because notes go to whatever is open.
-- No script call to load a plugin or render audio turned up, so plugin slots and the export dialog went through
-  the interface. FL also has a command line exporter for saved projects, which wasn't tested here.
+- `mixer.getTrackPeaks` kept reporting levels on muted tracks, so it can't prove what is audible.
+- `mixer.trackCount()` includes a last entry that isn't a real track. Reading it logs `Invalid mixer track nr`.
+- `plugins.getName(index, slot, midi.FPN_Preset)` returned an empty string after `nextPreset` and a name after the
+  next step, so don't use it to confirm the current preset.
+
+## Plugins
+
+`plugins.*` takes `(index, slot)`. For an instrument, index is the channel and slot is -1. For an effect, index is
+the mixer track and slot goes from 0 to 9.
+
+- VSTs report thousands of parameters, mostly empty. Ample Guitar SC has 361 named ones out of 4240. Skip names that
+  are blank or start with `?`, and find parameters by name, because indexes differ between plugins.
+- `setParamValue` took effect at once on LuxeVerb and Ample Guitar SC, and `getParamValueString` gives the value in
+  the plugin's own units, such as `7.527s`.
+- Parameter changes and `nextPreset` didn't enter the undo history, so keep the old values to restore them.
+- `plugins.getPadInfo(channel, -1, 1, pad)` gives the note of an FPC pad, and option 0 gives the pad count.
+- Which of Ample Guitar's amps is active isn't among the parameters that were listed.
+
+## Piano roll
+
+- A piano roll that is already open keeps its channel when another one is selected. Select the channel, hide the
+  window, and show it in a later request.
+- The caption can't prove the channel. FL draws the name itself, so `ui.getFocusedFormCaption()` and Windows both
+  return `Piano roll -`. Compare a known note count before writing, which was right on 10 of 10 alternating reads.
+- Nothing in the API starts a piano roll script. Ctrl+Alt+Y runs the last one again, after a first run from
+  Tools > Scripts in that session, and the keys need FL as the active window.
+
+## Rendering
+
+`FL64.exe /R<output.wav> /Ewav /O<folder> project.flp` opens a separate FL, renders and closes. It took 18 s for
+20 s of music with two Ample Guitar instances, and the file matched an export from the dialog within 0.2 dB of peak
+and RMS. With FL already open the same command exits with code 0 and writes nothing, so check that the file exists.
+No script call to load a plugin or render audio turned up, so plugin slots go through the interface.
 
 ## Driving the interface from outside
 
@@ -69,6 +100,7 @@ shortcuts and a file path into another program.
   windows around it.
 - Coordinates go stale whenever a panel moves. Capture the screen before the first click of each step.
 - Plugin windows open at different cascaded positions, so read each one before using a wheel or click on a knob.
+- Clicking FL's title bar can send a detached piano roll behind the Playlist, and the same stray click problem follows.
 - After a render, the mixer can sit behind the Playlist. A click meant for a mixer slot then paints clips in the
   Playlist. Bring the mixer forward by its header and check the panel title first. Right-click removes a stray clip.
 - The first click on an inactive panel may only focus it. If a plugin window didn't open, don't send wheel events
