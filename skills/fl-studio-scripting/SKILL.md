@@ -109,3 +109,16 @@ shortcuts and a file path into another program.
 - Check values in the hint bar after each change. Some knobs move in large steps and reach the minimum quickly.
 - Render with the export dialog in Pattern mode when the song isn't arranged yet, and read its settings before
   pressing Start.
+- `Process.MainWindowHandle` can point at a plugin's popup menu or window, which then reads as FL having moved. Find
+  the main window by enumerating the visible top-level windows of FL's process for a title containing `FL Studio`. The
+  title is `FL Studio 2026` with no project and `<project>.flp - FL Studio 2026` with one. Stop if nothing matches,
+  because offsets computed from an empty rectangle send the clicks somewhere else.
+- The export dialog opened at the same screen position after the main window moved, so don't derive its buttons from
+  the main window's rectangle.
+- Any click on the Playlist grid paints a clip, including a click meant only to give FL focus. Use the empty background
+  behind the panels for that. The clip snaps to the nearest grid line, so aim just after the bar line and check where
+  it landed.
+- An instrument dragged from the browser to the empty area of the Channel Rack gets a new channel, and it feeds the
+  Master. To add an effect, select the mixer track first and drag the plugin onto a slot.
+- Delete on a channel or a mixer slot opens a `Confirm` window with Ok and Cancel. Plugin windows stay open behind the
+  panels, and raising the Channel Rack by its header reaches the channels under them.
