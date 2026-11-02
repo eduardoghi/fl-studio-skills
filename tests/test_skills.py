@@ -3,6 +3,7 @@
 Run with `python3 -m unittest discover -s tests`.
 """
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -37,6 +38,11 @@ class Skills(unittest.TestCase):
         for note in (ROOT / "skills" / "fl-plugins" / "plugins").glob("*.md"):
             with self.subTest(note=note.name):
                 self.assertIn(f"`plugins/{note.name}`", index)
+
+    def test_marketplace_lists_the_plugin(self):
+        plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        marketplace = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+        self.assertEqual([p["name"] for p in marketplace["plugins"]], [plugin["name"]])
 
     def test_readme_lists_every_skill(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

@@ -23,7 +23,8 @@ wav-check width a.wav                         # left/right correlation and side 
 wav-check match out/ --peak -8.8 a.wav b.wav  # same level for A/B listening
 ```
 
-Run it with `uv run --no-project --with numpy python bin/wav-check` if numpy isn't installed.
+Installed as a plugin, `wav-check` is on `PATH`. In a clone it is `bin/wav-check`, two folders above this file. It
+needs numpy, so run `uv run --no-project --with numpy python <path to wav-check>` if numpy isn't installed.
 
 ## From a complaint to a measurement
 

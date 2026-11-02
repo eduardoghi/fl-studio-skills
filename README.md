@@ -2,6 +2,33 @@
 
 Skills and helper scripts for producing music in FL Studio with Claude Code. New skills get added as they're needed.
 
+## Install
+
+Inside Claude Code, on version 2.1.275 or later:
+
+```text
+/plugin install fl-studio-skills --marketplace eduardoghi/fl-studio-skills
+```
+
+On older versions, add the marketplace first:
+
+```text
+/plugin marketplace add eduardoghi/fl-studio-skills
+/plugin install fl-studio-skills@fl-studio-skills
+```
+
+That installs for your user. For one project, run this in a terminal after adding the marketplace:
+
+```sh
+claude plugin install fl-studio-skills@fl-studio-skills --scope project
+```
+
+The skills show up as `fl-studio-skills:audio-verification` and so on. To try a clone without installing it, run
+`claude --plugin-dir /path/to/fl-studio-skills`.
+
+The plugin only brings the skills. `fl-bridge` has its own setup in `bridge/README.md`, since it needs loopMIDI and
+scripts inside FL Studio.
+
 ## Skills
 
 - `skills/audio-verification`: check rendered audio with measurements, since the agent can't listen. Covers
