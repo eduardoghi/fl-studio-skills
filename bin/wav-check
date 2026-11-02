@@ -7,8 +7,11 @@
   wav-check noise a.wav --start 24              floor level, bands and slow level swings
   wav-check thumps a.wav --bpm 95               low attacks with almost no midrange, by beat
   wav-check chords a.wav --bpm 95 'Bm:0.3-3.3:B,F#,C#'    expected pitch classes per passage
+  wav-check chords a.wav --bpm 95 --skip 2 'Gm:28-32:G,Bb,D'    ignore the tail of the chord before
   wav-check width a.wav                         left/right correlation and side level
   wav-check match out/ --peak -8.8 a.wav b.wav  copies at the same level, for A/B listening
+  wav-check cut out/ --end 20.2 a.wav b.wav     the same passage of each file, levels untouched
+  wav-check cut out/ --bpm 95 --end 32 a.wav    the same, with --start and --end in beats
 
 Reads 16, 24 and 32 bit PCM and 32 bit float WAV files. Needs numpy.
 """
@@ -218,6 +221,9 @@ def cmd_chords(args):
             name, start, end, expected = parse_passage(text)
         except (KeyError, ValueError):
             sys.exit(f"bad passage {text!r}, use NAME:START-END:NOTE,NOTE with beats and names like F# or Bb")
+        start += args.skip
+        if start >= end:
+            sys.exit(f"{name}: --skip {args.skip:g} leaves nothing of the passage")
         chroma = pitch_classes(mono[int(start * beat * rate) : int(end * beat * rate)], rate)
         order = np.argsort(chroma)[::-1]
         strongest = {int(i) for i in order[: len(expected)]}
@@ -278,6 +284,32 @@ def cmd_match(args):
         print(f"{out / name}: gain {db(gain):+.1f} dB, peak {peak:.1f} dBFS")
 
 
+def cmd_cut(args):
+    unit = 60 / args.bpm if args.bpm else 1
+    out = Path(args.out)
+    prepared = []
+    for path in args.files:
+        target = out / Path(path).name
+        if target.resolve() == Path(path).resolve():
+            sys.exit(f"{path}: the cut would replace its source. Nothing was written. Use another folder")
+        x, rate = read_wav(path)
+        start = int(args.start * unit * rate)
+        end = len(x) if args.end is None else min(int(args.end * unit * rate), len(x))
+        if end <= start:
+            sys.exit(f"{path}: nothing between --start and --end. Nothing was written")
+        x = x[start:end].copy()
+        fade_in = min(int(args.fade_in * rate), len(x))
+        fade_out = min(int(args.fade * rate), len(x))
+        x[:fade_in] *= np.linspace(0, 1, fade_in)[:, None]
+        x[len(x) - fade_out :] *= np.linspace(1, 0, fade_out)[:, None]
+        prepared.append((target, x, rate))
+
+    out.mkdir(parents=True, exist_ok=True)
+    for target, x, rate in prepared:
+        write_wav(target, x, rate)
+        print(f"{target}: {len(x) / rate:.2f} s, peak {db(np.abs(x).max()):.1f} dBFS")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -309,6 +341,7 @@ def main():
     p = sub.add_parser("chords")
     p.add_argument("file")
     p.add_argument("--bpm", type=float, required=True)
+    p.add_argument("--skip", type=float, default=0, help="beats to ignore at the start of each passage")
     p.add_argument("passages", nargs="+", metavar="NAME:START-END:NOTES")
     p.set_defaults(run=cmd_chords)
 
@@ -325,6 +358,16 @@ def main():
     p.add_argument("--seconds", type=float, help="cut each file here")
     p.add_argument("--fade", type=float, default=1.5, help="fade before the cut, in seconds")
     p.set_defaults(run=cmd_match)
+
+    p = sub.add_parser("cut")
+    p.add_argument("out")
+    p.add_argument("files", nargs="+")
+    p.add_argument("--start", type=float, default=0)
+    p.add_argument("--end", type=float)
+    p.add_argument("--bpm", type=float, help="read --start and --end as beats instead of seconds")
+    p.add_argument("--fade", type=float, default=1, help="fade before the end, in seconds")
+    p.add_argument("--fade-in", type=float, default=0.01, help="fade after the start, in seconds, to avoid a click")
+    p.set_defaults(run=cmd_cut)
 
     args = parser.parse_args()
     sys.exit(args.run(args) or 0)

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 try:
     import numpy as np
@@ -124,6 +125,76 @@ class WavCheck(unittest.TestCase):
         out = self.run_tool("chords", path, "--bpm", "120", "Cm:0-8:C,Eb,G", code=1)
         self.assertIn("missing Eb", out)
         self.assertIn("extra E", out)
+
+    def test_chords_skip_ignores_the_tail_of_the_last_chord(self):
+        t = np.arange(4 * RATE) / RATE
+        tail = np.clip(2 - t, 0, 1) * tone(261.63, 4, 0.3)
+        path = self.write("a.wav", tail + tone(220, 4, 0.1) + tone(329.63, 4, 0.1))
+        out = self.run_tool("chords", path, "--bpm", "120", "Am:0-8:A,E", code=1)
+        self.assertIn("extra C", out)
+        out = self.run_tool("chords", path, "--bpm", "120", "--skip", "4", "Am:0-8:A,E")
+        self.assertIn("beats 4-8  ok", out)
+
+    def test_chords_refuses_a_skip_past_the_passage(self):
+        done = subprocess.run(
+            [sys.executable, WAV_CHECK, "chords", self.write("a.wav", tone(440, 1)), "--bpm", "120", "--skip", "2"]
+            + ["A:0-2:A"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("leaves nothing", done.stderr)
+
+    def test_cut_keeps_the_level_of_each_file(self):
+        quiet = self.write("quiet.wav", tone(1000, 4, amp=0.1))
+        loud = self.write("loud.wav", tone(1000, 4, amp=0.5))
+        out_dir = os.path.join(self.tmp.name, "out")
+        self.run_tool("cut", out_dir, "--start", "1", "--end", "3", "--fade", "0.1", quiet, loud)
+        quiet_out = self.run_tool("measure", os.path.join(out_dir, "quiet.wav"))
+        self.assertIn("2.0 s", quiet_out)
+        self.assertIn("peak -20.0 dBFS", quiet_out)
+        self.assertIn("peak -6.0 dBFS", self.run_tool("measure", os.path.join(out_dir, "loud.wav")))
+
+    def test_cut_reads_beats_with_bpm(self):
+        path = self.write("a.wav", tone(1000, 4))
+        out_dir = os.path.join(self.tmp.name, "out")
+        self.run_tool("cut", out_dir, "--bpm", "120", "--end", "4", path)
+        self.assertIn("2.0 s", self.run_tool("measure", os.path.join(out_dir, "a.wav")))
+
+    def test_cut_fades_out_to_silence(self):
+        path = self.write("a.wav", tone(1000, 4))
+        out_dir = os.path.join(self.tmp.name, "out")
+        self.run_tool("cut", out_dir, "--end", "2", "--fade", "1", path)
+        lines = self.run_tool("timeline", os.path.join(out_dir, "a.wav"), "--step", "0.5").splitlines()
+        self.assertIn("-6.0", lines[0])
+        self.assertLess(float(lines[3].split()[2]), -10)
+
+    def test_cut_refuses_to_replace_its_source(self):
+        path = self.write("a.wav", tone(1000, 2))
+        before = Path(path).read_bytes()
+        done = subprocess.run(
+            [sys.executable, WAV_CHECK, "cut", self.tmp.name, "--end", "1", path],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("replace its source", done.stderr)
+        self.assertEqual(Path(path).read_bytes(), before)
+
+    def test_cut_writes_nothing_when_a_later_file_is_too_short(self):
+        long_file = self.write("long.wav", tone(1000, 4))
+        short_file = self.write("short.wav", tone(1000, 1))
+        out_dir = os.path.join(self.tmp.name, "out")
+        done = subprocess.run(
+            [sys.executable, WAV_CHECK, "cut", out_dir, "--start", "2", "--end", "3", long_file, short_file],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(done.returncode, 1)
+        self.assertFalse(os.path.exists(out_dir))
 
     def test_width(self):
         left = tone(440, 1)

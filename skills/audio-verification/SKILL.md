@@ -19,8 +19,10 @@ wav-check timeline a.wav --step 4             # peak per interval
 wav-check noise a.wav --start 24              # floor level, bands and slow level swings
 wav-check thumps a.wav --bpm 95               # low attacks with almost no midrange
 wav-check chords a.wav --bpm 95 'Bm:0.3-3.3:B,F#,C#'
+wav-check chords a.wav --bpm 95 --skip 1 'Gm:28-32:G,Bb,D'
 wav-check width a.wav                         # left/right correlation and side level
 wav-check match out/ --peak -8.8 a.wav b.wav  # same level for A/B listening
+wav-check cut out/ --bpm 95 --end 32 a.wav b.wav  # the same passage, levels untouched
 ```
 
 Installed as a plugin, `wav-check` is on `PATH`. In a clone it is `bin/wav-check`, two folders above this file. It
@@ -62,11 +64,21 @@ Run `chords` on the track with no distortion, delay or reverb. Each effect moves
 A `DIFFERS` on a wet track is not a wrong note until the dry track says so. A passage should start after the attack
 and end before the next chord.
 
+A synth pad has the same problem with no effect on its mixer track, since a patch can carry its own release and
+effects, so it can read the last chord for a while. `--skip` moves the start of every passage by that many beats, and the printed range shows what was read.
+On a 4 beat chord at 95 BPM, two pads read `DIFFERS` over the whole chord and `ok` from the second beat, so the notes
+were right and the change was slow.
+
 ## Comparing versions
 
 Louder usually reads as better, so match levels before asking anyone to choose. Use `--peak` for whole takes
 and `--rms` for short excerpts, where one hit would set the whole gain. Keep the original files, and say which
 copies had their gain changed.
+
+Use `cut` instead when the level difference is the thing being compared, such as a passage with and without a new
+layer. It keeps each file's level. End the cut before the next section starts, because a fade over the entry of a
+band leaves that entry in the file. Measure the same range as well, since a window that runs into the next section
+counts its level.
 
 Change one thing per render.
 
