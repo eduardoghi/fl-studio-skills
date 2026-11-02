@@ -42,8 +42,8 @@ jobs:
                   python-version: "3.14"
             - run: pip install -r requirements-dev.txt
             # Scripts in bin/ have no extension, so ruff only sees them when named.
-            - run: ruff format --check bin/wav-check tests
-            - run: ruff check bin/wav-check tests
+            - run: ruff format --check bin/wav-check tests bridge
+            - run: ruff check bin/wav-check tests bridge
 
     test:
         name: test on ${{ matrix.os }}

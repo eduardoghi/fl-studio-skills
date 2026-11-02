@@ -1,0 +1,78 @@
+"""Applies the action queued by fl-bridge to the open piano roll.
+
+Run it from Tools > Scripts in the piano roll of the target channel. It writes
+pianoroll_done.json next to this file instead of showing a message box, because
+an open box makes mixer calls fail with "Operation unsafe at current time".
+"""
+
+import json
+import os
+
+import flpianoroll as flp
+
+BRIDGE_DIR = os.getcwd()  # FL runs the script with its own folder as the cwd.
+QUEUE_FILE = os.path.join(BRIDGE_DIR, "pianoroll_queue.json")
+DONE_FILE = os.path.join(BRIDGE_DIR, "pianoroll_done.json")
+
+
+def ticks(beats):
+    return int(round(float(beats) * flp.score.PPQ))
+
+
+def add_notes(payload):
+    for item in payload["notes"]:
+        note = flp.Note()
+        note.number = int(item["pitch"])
+        note.time = ticks(item["start"])
+        note.length = ticks(item["length"])
+        note.velocity = float(item.get("velocity", 0.8))
+        flp.score.addNote(note)
+    return {"added": len(payload["notes"])}
+
+
+def clear(payload):
+    count = flp.score.noteCount
+    flp.score.clearNotes(True)
+    return {"removed": count}
+
+
+def read(payload):
+    ppq = float(flp.score.PPQ)
+    notes = []
+    for i in range(flp.score.noteCount):
+        note = flp.score.getNote(i)
+        notes.append({
+            "pitch": note.number,
+            "start": note.time / ppq,
+            "length": note.length / ppq,
+            "velocity": round(note.velocity, 3),
+        })
+    return {"notes": notes}
+
+
+ACTIONS = {"add_notes": add_notes, "clear": clear, "read": read}
+
+
+def main():
+    with open(QUEUE_FILE) as f:
+        item = json.load(f)
+    if not item:
+        flp.Utils.ShowMessage("Claude Bridge: nothing queued.")
+        return
+    done = {"id": item.get("id"), "ok": True}
+    try:
+        expected = item.get("expect_notes")
+        if expected is not None and flp.score.noteCount != expected:
+            # The piano roll can't say which channel it shows, so a different count stops a write to the wrong one.
+            raise ValueError("expected " + str(expected) + " notes, found " + str(flp.score.noteCount))
+        done["result"] = ACTIONS[item["action"]](item.get("payload", {}))
+    except Exception as exc:
+        done = {"id": item.get("id"), "ok": False, "error": type(exc).__name__ + ": " + str(exc)}
+    # FL blocks os.rename, so the queue is overwritten instead of moved away.
+    with open(QUEUE_FILE, "w") as f:
+        f.write("{}")
+    with open(DONE_FILE, "w") as f:
+        json.dump(done, f)
+
+
+main()
