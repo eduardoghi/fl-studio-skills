@@ -12,8 +12,9 @@ server = FastMCP(
     instructions=(
         "Controls the project open in FL Studio. Every change is read back from FL. Nothing here takes the keyboard "
         "focus or moves the mouse, so FL can stay behind other windows, but not minimized when the tool needs its "
-        "panels. Menus and dialogs still appear on screen. Nothing is saved from here. Piano roll actions are queued "
-        "and need the ClaudeBridge script to run."
+        "panels. While a tool drives FL's interface, FL and the menus and dialogs it opens are invisible and let clicks "
+        "through, unless FL has the focus. If FL stays invisible after a failure, call fl_reveal. Nothing is saved "
+        "from here. Piano roll actions are queued and need the ClaudeBridge script to run."
     ),
 )
 
@@ -323,9 +324,20 @@ def fl_menu_keys(keys: list[str]) -> dict:
     """Send keys to the open menu. The keys are down, up, left, right, enter and escape.
 
     Disabled rows are skipped, so counts change with the state of the project. Check the highlighted row with
-    fl_capture before sending enter. These menus appear above other programs.
+    fl_capture before sending enter. A menu opened by fl_click stays invisible until it is chosen or escaped, and
+    fl_capture still sees it.
     """
     return window.menu_keys(keys)
+
+
+@server.tool()
+def fl_reveal() -> dict:
+    """Close FL's open menus and make its windows visible and clickable again.
+
+    For when FL stayed invisible because a tool stopped halfway. Returns how many menus were closed and the classes
+    of the windows shown again.
+    """
+    return window.reveal()
 
 
 @server.tool()
@@ -344,8 +356,8 @@ def fl_export(output: str, overwrite: bool = False) -> dict:
     """Export the project open in FL to a WAV, from memory, with FL staying open and behind other windows.
 
     output is an absolute path. An existing file is refused unless overwrite is true. Song mode exports the
-    arrangement and pattern mode the current pattern, and song_mode in the answer says which. The save dialog and
-    the render dialog appear on screen for a moment.
+    arrangement and pattern mode the current pattern, and song_mode in the answer says which. The export goes
+    through FILE > Export > Wave file with FL and its dialogs invisible.
     """
     song_mode = client.call("project")["song_mode"]
     return {"output": output, "bytes": window.export_wav(output, overwrite), "song_mode": song_mode}

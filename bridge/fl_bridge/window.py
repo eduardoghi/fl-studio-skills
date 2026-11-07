@@ -1,8 +1,9 @@
 """Drives FL Studio's interface with window messages, so it works behind other windows.
 
 Nothing here moves the mouse or takes the keyboard focus. Clicks and keys are posted to FL's own windows, and the
-modifiers of a shortcut are set in FL's input state alone, so the real keyboard stays free. Menus and dialogs still
-appear on screen, because FL opens them above other programs.
+modifiers of a shortcut are set in FL's input state alone, so the real keyboard stays free. FL still opens menus and
+dialogs above other programs and raises its main window while it works, so actions run inside a shield that makes
+those windows invisible and lets clicks pass through them. See `_shielded`.
 
 Everything was observed on FL Studio 26.1.4. Dragging doesn't work this way, because FL starts the drag and never
 drops.
@@ -14,6 +15,7 @@ import os
 import struct
 import sys
 import tempfile
+import threading
 import time
 import uuid
 import zlib
@@ -56,24 +58,44 @@ MENU_KEYS = {
     "escape": VK_ESCAPE,
 }
 
+CLASS_MAIN = "TFruityLoopsMainForm"
+CLASS_APPLICATION = "TApplication"  # A hidden 0x0 window that owns FL's forms.
 CLASS_MAIN_PANELS = ("TEventEditForm", "TStepSeqForm", "TFXForm")
 CLASS_FL_MENU = "TQuickPopupMenuWindow"
 CLASS_NATIVE_MENU = "#32768"
 CLASS_DIALOG = "#32770"
 CLASS_RENDER = "TWAVRenderForm"
+CLASS_FLIP_TOOL = "TPRFlipForm"
 PLUGIN_MENU_SIZE = (247, 271)  # The browser's menu for a plugin. Folders and other rows open different ones.
+FILE_MENU = (38, 25)  # FILE in the menu bar of the main window.
+FILE_MENU_EXPORT_DOWNS = 11  # Down presses from the top of FILE to Export, with the disabled row skipped.
+EXPORT_MENU_SIZE = (179, 358)  # The Export submenu. Import, one row above, opens a submenu of another size.
 RENDER_FORM_SIZE = (433, 611)
-RENDER_MINIMIZED = (290, 587)  # Measured on the form above. Start brought FL in front of other windows.
+RENDER_START = (385, 587)  # Measured on the form above.
 RENDER_CLOSE = (419, 14)
 FILE_NAME_FIELD = 1001
 DIALOG_OK = 1
 DIALOG_CANCEL = 2
 PW_RENDERFULLCONTENT = 2
 SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
 SWP_NOZORDER = 0x0004
 SWP_NOACTIVATE = 0x0010
+GWL_EXSTYLE = -20
+WS_EX_TRANSPARENT = 0x00000020  # Leaves the window out of hit testing, so clicks reach whatever is below.
+WS_EX_LAYERED = 0x00080000
+GHOST_STYLE = WS_EX_LAYERED | WS_EX_TRANSPARENT
+LWA_ALPHA = 2
+EVENT_OBJECT_CREATE = 0x8000
+EVENT_OBJECT_SHOW = 0x8002
+WINEVENT_OUTOFCONTEXT = 0
+OBJID_WINDOW = 0
+GA_ROOT = 2
+PM_REMOVE = 1
+RDW_REPAINT = 0x0001 | 0x0004 | 0x0080 | 0x0400  # Invalidate, erase, all children, frame.
 FL_PROCESSES = ("fl64.exe", "fl.exe")
 KEY_GAP_S = 0.05
+SHIELD_JOIN_S = 15.0  # The hook thread only stops between messages, and FL can hold one for seconds.
 POLL_S = 0.1
 
 
@@ -115,6 +137,20 @@ def menu_key(name):
     if name not in MENU_KEYS:
         raise WindowError(f"unknown menu key {name!r}, use one of {', '.join(MENU_KEYS)}")
     return MENU_KEYS[name]
+
+
+def ghosted(style):
+    """Return an extended style that, with alpha 0, makes a window invisible and lets clicks pass through it."""
+    return style | GHOST_STYLE
+
+
+def is_ghost(style):
+    return style & GHOST_STYLE == GHOST_STYLE
+
+
+def unghosted(style):
+    """Drop the ghost bits from a style whose original is unknown. FL's own windows had neither bit."""
+    return style & ~GHOST_STYLE
 
 
 def centered(outer, inner):
@@ -173,6 +209,20 @@ class _BitmapInfo(ctypes.Structure):
 
 
 _api_cache = None
+_WINEVENTPROC = (
+    ctypes.WINFUNCTYPE(
+        None,
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.HWND,
+        wintypes.LONG,
+        wintypes.LONG,
+        wintypes.DWORD,
+        wintypes.DWORD,
+    )
+    if sys.platform == "win32"
+    else None
+)
 
 
 def _api():
@@ -231,6 +281,29 @@ def _api():
         ctypes.POINTER(_BitmapInfo),
         wintypes.UINT,
     ]
+    user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+    user32.GetWindowLongPtrW.argtypes = [hwnd, ctypes.c_int]
+    user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+    user32.SetWindowLongPtrW.argtypes = [hwnd, ctypes.c_int, ctypes.c_ssize_t]
+    user32.SetLayeredWindowAttributes.argtypes = [hwnd, wintypes.DWORD, wintypes.BYTE, wintypes.DWORD]
+    user32.GetAncestor.restype = hwnd
+    user32.GetAncestor.argtypes = [hwnd, wintypes.UINT]
+    user32.IsWindow.argtypes = [hwnd]
+    user32.RedrawWindow.argtypes = [hwnd, ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT]
+    user32.SetWinEventHook.restype = wintypes.HANDLE
+    user32.SetWinEventHook.argtypes = [
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HMODULE,
+        _WINEVENTPROC,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+    ]
+    user32.UnhookWinEvent.argtypes = [wintypes.HANDLE]
+    user32.PeekMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), hwnd, wintypes.UINT, wintypes.UINT, wintypes.UINT]
+    user32.TranslateMessage.argtypes = [ctypes.POINTER(wintypes.MSG)]
+    user32.DispatchMessageW.argtypes = [ctypes.POINTER(wintypes.MSG)]
     kernel32.OpenProcess.restype = wintypes.HANDLE
     kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
@@ -340,6 +413,168 @@ def _require_visible(main):
         )
 
 
+def _process_windows(pid):
+    """Return every top-level window of a process, hidden ones included."""
+    user32, _, _ = _api()
+    found = []
+    callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def visit(window, _):
+        if _process_id(window) == pid:
+            found.append(window)
+        return True
+
+    user32.EnumWindows(callback(visit), 0)
+    return found
+
+
+def _repaint(window):
+    user32, _, _ = _api()
+    user32.RedrawWindow(window, None, None, RDW_REPAINT)
+
+
+class _Shield:
+    """Hide FL's main window and every window FL opens while an action runs.
+
+    FL opens menus and dialogs above other programs, and raises its main window while exporting even without taking
+    the focus. Pushing it back down the window order lost to the save dialog, which raised it 33 times in 80 ms, so
+    the windows are made invisible instead, with alpha 0 and click-through, which works from another process. Posted
+    keys and clicks still reach them, and PrintWindow still captures them.
+
+    New windows are caught by a WinEvent hook. The events arrive after the window is already visible, 0 to 16 ms
+    later for menus and up to about 150 ms for the save dialog, and no flash was seen in testing.
+    """
+
+    def __init__(self, main):
+        self.main = main
+        self.pid = _process_id(main)
+        self.styles = {}
+        self.stop = threading.Event()
+        self.ready = threading.Event()
+        self.thread = None
+
+    def _ghost(self, window):
+        user32, _, _ = _api()
+        if window in self.styles:
+            return
+        style = user32.GetWindowLongPtrW(window, GWL_EXSTYLE)
+        self.styles[window] = style
+        user32.SetWindowLongPtrW(window, GWL_EXSTYLE, ghosted(style))
+        user32.SetLayeredWindowAttributes(window, 0, 0, LWA_ALPHA)
+
+    def _on_event(self, hook, event, window, id_object, id_child, thread, when):
+        user32, _, _ = _api()
+        if id_object != OBJID_WINDOW or not window or user32.GetAncestor(window, GA_ROOT) != window:
+            return
+        if _class(window) not in (CLASS_MAIN, CLASS_APPLICATION):
+            self._ghost(window)
+
+    def _listen(self):
+        user32, _, _ = _api()
+        callback = _WINEVENTPROC(self._on_event)
+        hooks = [
+            user32.SetWinEventHook(event, event, None, callback, self.pid, 0, WINEVENT_OUTOFCONTEXT)
+            for event in (EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW)
+        ]
+        self.ready.set()
+        message = wintypes.MSG()
+        try:
+            # Out of context events are delivered through this thread's message queue.
+            while not self.stop.is_set():
+                while user32.PeekMessageW(ctypes.byref(message), None, 0, 0, PM_REMOVE):
+                    user32.TranslateMessage(ctypes.byref(message))
+                    user32.DispatchMessageW(ctypes.byref(message))
+                time.sleep(0.002)
+        finally:
+            for hook in hooks:
+                user32.UnhookWinEvent(hook)
+
+    def __enter__(self):
+        self.thread = threading.Thread(target=self._listen, daemon=True)
+        self.thread.start()
+        self.ready.wait(2)
+        self._ghost(self.main)
+        return self
+
+    def __exit__(self, *_):
+        user32, _, _ = _api()
+        self.stop.set()
+        # While FL is busy, loading a plugin for example, the hook can still be adding windows to self.styles, and
+        # iterating it then raised "dictionary changed size during iteration".
+        self.thread.join(SHIELD_JOIN_S)
+        # FL rises while hidden and would show up above the window in use, as it did over a game. Its dialogs are
+        # closed by now, so putting it back below that window holds.
+        front = user32.GetForegroundWindow()
+        order = _top_windows()
+        visible = front in order and self.main in order
+        if front and _process_id(front) != self.pid and visible and order.index(self.main) < order.index(front):
+            user32.SetWindowPos(self.main, front, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
+        # A menu left open waits for the next fl_menu_keys, so it stays invisible. It closes when chosen or escaped,
+        # and FL makes a new window for the next one. Dialogs come back, so a stuck one can be seen.
+        menus = set(open_menus(self.main))
+        for window, style in list(self.styles.items()):
+            if window not in menus and user32.IsWindow(window):
+                user32.SetWindowLongPtrW(window, GWL_EXSTYLE, style)
+                _repaint(window)
+        # A window ghosted after the copy above, or by a hook that outlived the join, would stay invisible.
+        for window in _process_windows(self.pid):
+            style = user32.GetWindowLongPtrW(window, GWL_EXSTYLE)
+            if window not in menus and window not in self.styles and is_ghost(style):
+                user32.SetWindowLongPtrW(window, GWL_EXSTYLE, unghosted(style))
+                _repaint(window)
+
+
+_shield_depth = 0
+
+
+@contextlib.contextmanager
+def _shielded():
+    """Run an action inside a `_Shield`, unless one is already active or FL has the focus.
+
+    With FL in the foreground the person is using it, so nothing is hidden.
+    """
+    global _shield_depth
+    user32, _, _ = _api()
+    main = main_window()
+    front = user32.GetForegroundWindow()
+    if _shield_depth or (front and _process_id(front) == _process_id(main)):
+        _shield_depth += 1
+        try:
+            yield
+        finally:
+            _shield_depth -= 1
+        return
+    _shield_depth += 1
+    try:
+        with _Shield(main):
+            yield
+    finally:
+        _shield_depth -= 1
+
+
+def reveal():
+    """Close FL's menus and make its windows visible and clickable again, for when a shielded action stopped halfway.
+
+    A process that died inside the shield leaves FL invisible, and its original styles died with it. FL's own windows
+    had neither ghost bit, so both are dropped.
+    """
+    user32, _, _ = _api()
+    main = main_window()
+    closed = 0
+    while open_menus(main) and closed < 5:
+        _press(open_menus(main)[0], VK_ESCAPE)
+        time.sleep(0.25)
+        closed += 1
+    shown = []
+    for window in _process_windows(_process_id(main)):
+        style = user32.GetWindowLongPtrW(window, GWL_EXSTYLE)
+        if is_ghost(style):
+            user32.SetWindowLongPtrW(window, GWL_EXSTYLE, unghosted(style))
+            _repaint(window)
+            shown.append(_class(window))
+    return {"menus_closed": closed, "windows_shown": shown}
+
+
 def _deepest(root, screen_x, screen_y):
     """Find the innermost window at a screen point, since FL's panels ignore clicks sent to their parents."""
     user32, _, _ = _api()
@@ -375,6 +610,7 @@ def _post_click(root, screen_x, screen_y, button="left"):
     return target
 
 
+@_shielded()
 def click(x, y, button="left"):
     """Click at a point relative to the main window, the same coordinates as a capture."""
     main = main_window()
@@ -409,6 +645,7 @@ def _press(window, key, alt=False):
     user32.PostMessageW(window, key_message(alt, True), key, key_param(scan, alt, True))
 
 
+@_shielded()
 def menu_keys(keys):
     """Send keys to the open menu. Clicking a menu item closes the menu without choosing it, keys do choose it."""
     codes = [menu_key(name) for name in keys]
@@ -462,6 +699,7 @@ def _shortcut(window, main, key, ctrl=False, alt=False):
         time.sleep(0.4)  # FL reads the modifiers when it handles the message, so they stay held until then.
 
 
+@_shielded()
 def run_last_script():
     """Press Ctrl+Alt+Y on the piano roll, which repeats the last piano roll script."""
     main = main_window()
@@ -469,6 +707,12 @@ def run_last_script():
     if not panels:
         raise WindowError("the piano roll isn't open")
     _shortcut(panels[0], main, ord("Y"), ctrl=True, alt=True)
+    # Without Ctrl the key reads as Alt+Y, which opens the flip tool instead of running the script.
+    flip_tools = _fl_windows(main, (CLASS_FLIP_TOOL,))
+    for tool in flip_tools:
+        _post(tool, WM_CLOSE)
+    if flip_tools:
+        raise WindowError("FL read the shortcut as Alt+Y and opened the flip tool, which was closed. Try again")
 
 
 def capture(folder=None, region=None):
@@ -530,6 +774,7 @@ def _wait(condition, timeout, message):
         time.sleep(POLL_S)
 
 
+@_shielded()
 def load_plugin(x, y, channel_count, timeout=30):
     """Open the plugin at a browser row in a new channel, through the row's menu.
 
@@ -538,8 +783,8 @@ def load_plugin(x, y, channel_count, timeout=30):
     """
     main = main_window()
     _require_visible(main)
-    if open_menus(main):
-        raise WindowError("a menu is already open. Close it with fl_menu_keys(['escape'])")
+    # The menu of the previous load can still be closing, so only a menu that stays open is refused.
+    _wait(lambda: not open_menus(main), 3, "a menu is already open. Close it with fl_menu_keys(['escape'])")
     before = channel_count()
     left, top, _, _ = _rect(main)
     _post_click(main, left + x, top + y, "right")
@@ -593,14 +838,33 @@ def _form_point(form, point):
     return left + x, top + y
 
 
+def _export_menu_open(main):
+    menus = open_menus(main)
+    return len(menus) == 2 and _rect(menus[0])[2:] == EXPORT_MENU_SIZE
+
+
 def _open_export_dialog(main):
-    """Press Ctrl+R on each panel until the dialog opens, since FL takes shortcuts from the panel in use."""
-    panels = _panels(main) or [main]
-    for panel in panels:
-        _shortcut(panel, main, ord("R"), ctrl=True)
-        with contextlib.suppress(WindowError):
-            return _wait(lambda: _dialog(main), 1.5, "")
-    raise WindowError("Ctrl+R didn't open the export dialog")
+    """Choose FILE > Export > Wave file with keys.
+
+    Ctrl+R opened the same dialog, but holding Ctrl means attaching to FL's input, and FL then came in front of the
+    window with the focus. A row above Export can become enabled, so a wrong submenu gets one more try a row lower.
+    """
+    left, top, _, _ = _rect(main)
+    _post_click(main, left + FILE_MENU[0], top + FILE_MENU[1])
+    _wait(lambda: open_menus(main), 3, "the FILE menu didn't open")
+    time.sleep(0.3)
+    menu_keys(["down"] * FILE_MENU_EXPORT_DOWNS + ["right"])
+    time.sleep(0.3)
+    if not _export_menu_open(main):
+        menu_keys(["left", "down", "right"])
+        time.sleep(0.3)
+    if not _export_menu_open(main):
+        while open_menus(main):
+            menu_keys(["escape"])
+            time.sleep(0.25)
+        raise WindowError("FILE > Export wasn't where it was measured. Check the FILE menu with fl_capture")
+    menu_keys(["enter"])  # Wave file is the first row and the submenu opens with it highlighted.
+    return _wait(lambda: _dialog(main), 5, "Wave file didn't open the save dialog")
 
 
 def _settled_size(path, seconds=1.0):
@@ -612,12 +876,13 @@ def _settled_size(path, seconds=1.0):
     return size if size > 0 and path.is_file() and path.stat().st_size == size else 0
 
 
+@_shielded()
 def export_wav(output, overwrite=False, timeout=300):
     """Export the open project to a WAV with FL open, and return the file's size.
 
     Goes through a temporary name in the same folder, so the save dialog never asks about replacing a file. Uses
-    Render minimized because Start brought FL in front of other windows. The dialog keeps the mode FL chose, so song
-    mode exports the arrangement and pattern mode exports the pattern.
+    Start, because Render minimized restores FL at the end and that took the focus. The dialog keeps the mode FL
+    chose, so song mode exports the arrangement and pattern mode exports the pattern.
     """
     output = Path(output)
     if not output.is_absolute():
@@ -651,7 +916,7 @@ def export_wav(output, overwrite=False, timeout=300):
     if temporary.stem not in _text(form):
         _close_render_form(form)
         raise WindowError(f"FL didn't take the file name. The dialog reads {_text(form)!r}")
-    _post_click(form, *_form_point(form, RENDER_MINIMIZED))
+    _post_click(form, *_form_point(form, RENDER_START))
     try:
         _wait(lambda: not _render_form(main) and _settled_size(temporary), timeout, f"FL didn't finish in {timeout} s")
         os.replace(temporary, output)

@@ -478,6 +478,20 @@ class Window(unittest.TestCase):
         with self.assertRaisesRegex(window.WindowError, "unknown menu key"):
             window.menu_key("space")
 
+    def test_ghost_style_hides_and_lets_clicks_through(self):
+        style = window.ghosted(0x50000)
+        self.assertTrue(style & window.WS_EX_LAYERED)
+        self.assertTrue(style & window.WS_EX_TRANSPARENT)
+        self.assertEqual(style & 0x50000, 0x50000)
+        self.assertTrue(window.is_ghost(style))
+
+    def test_one_ghost_bit_alone_is_not_a_ghost(self):
+        self.assertFalse(window.is_ghost(window.WS_EX_LAYERED))
+        self.assertFalse(window.is_ghost(0x50000))
+
+    def test_unghosted_keeps_the_other_bits(self):
+        self.assertEqual(window.unghosted(window.ghosted(0x50000)), 0x50000)
+
     def test_dialog_is_centered_on_fl(self):
         self.assertEqual(window.centered((207, 21, 2777, 1240), (433, 611)), (1379, 335))
 

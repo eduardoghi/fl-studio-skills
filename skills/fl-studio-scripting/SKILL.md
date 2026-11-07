@@ -96,8 +96,8 @@ No script call to load a plugin or render audio turned up, so plugin slots go th
 ## Working without focus
 
 FL can stay behind other windows while it is driven, so the person can keep typing elsewhere. Messages posted to its
-windows don't take the focus or move the mouse. Menus and dialogs still appear above other programs, so aim for not
-taking the focus rather than for not being seen.
+windows don't take the focus or move the mouse. FL still opens menus and dialogs above other programs, so the bridge
+hides them as described in "Hiding FL while it works".
 
 | Action | What worked | What failed |
 |---|---|---|
@@ -108,7 +108,7 @@ taking the focus rather than for not being seen.
 | Press a shortcut | Hold the modifiers in FL's thread, then post the key to a panel | Posting to the main window, or posting Ctrl as a key |
 | Load a plugin | Row menu in the browser, `Open in new channel` | Posted drags start and never drop |
 | Fill a save dialog | `WM_SETTEXT` on the `Edit` with id 1001, `BM_CLICK` on button 1 | The other `Edit`, which belongs to the address bar and is ignored |
-| Export | Ctrl+R on a panel, then Render minimized | Start brought FL in front of other windows, though Render minimized was the only step changed |
+| Export | FILE > Export > Wave file with keys, then Start, with FL hidden | Ctrl+R raised FL above the focused window. Render minimized restores FL at the end, and that took the focus |
 
 Shortcuts need the most care. FL reads Ctrl and Alt from the state of its own thread, so attach to that thread with
 `AttachThreadInput`, change the state with `SetKeyboardState`, post the key with `WM_SYSKEYDOWN` when Alt is held, and
@@ -122,9 +122,35 @@ and Ctrl+R both worked sent to the piano roll, and Ctrl+Alt+Y did nothing sent t
 - Keep the menus open for as little as possible by sending all the keys from one process.
 - Enter and escape can close a menu before the key is released, so don't treat a failed key up as an error.
 - A plugin's row menu has a fixed size in the browser, which tells it from the menu of a folder before choosing.
-- The bridge kept working while FL was minimized, but nothing can be seen or clicked there.
+- The bridge kept working while FL was minimized, but nothing can be seen or clicked there. An export through the
+  FILE menu still worked once from a minimized FL, which came out of the minimized state during the render.
 - Check window order as well as focus when testing this. FL came to the front during an export without taking the
   focus, and a test that only read the foreground window didn't notice.
+
+## Hiding FL while it works
+
+A window of another process can be made invisible and click-through from outside, with `WS_EX_LAYERED` and
+`WS_EX_TRANSPARENT` set through `SetWindowLongPtrW` and alpha 0 from `SetLayeredWindowAttributes`. Posted keys and
+clicks still reach it, and `PrintWindow` still captures it. With an FL menu hidden like that, clicks in other programs
+landed there and the menu stayed open, so it doesn't capture the mouse.
+
+- New windows come from a WinEvent hook on FL's process, `EVENT_OBJECT_CREATE` and `EVENT_OBJECT_SHOW`, out of context.
+  The events arrive with the window already visible, 0 to 16 ms later for menus and up to about 150 ms for the save
+  dialog. Nobody saw a flash.
+- Moving a menu off screen doesn't work, because FL pulls it back to the edge of the monitor.
+- Pushing FL down the window order lost. The save dialog raised FL 33 times in 80 ms, and FL stayed above the focused
+  window for about 0.25 s anyway, so the main window is hidden during actions too. Whatever part of FL was uncovered
+  disappears for that time.
+- FL can end the action above the focused window and show up over it once visible again, as it did over a game. Put
+  it back below that window before restoring its style. With the dialogs closed by then, that holds.
+- Leave everything visible when FL has the focus, since the person is using it.
+- Restore the styles in a `finally`. A process that dies inside the shield leaves FL invisible and unclickable, so
+  `fl_reveal` drops both bits from every FL window. FL's own windows had neither.
+- A menu opened by one call waits for the next, so it stays hidden between calls. FL makes a new window for each menu.
+- Kontakt's window and its menus are drawn inside FL's plugin form, a child of the main window, so they never cover
+  other programs.
+- A "Python message" from a piano roll script showed hidden and closed with a posted click on Ok. Once, after a script
+  error, three larger message windows appeared with FL in front and FL closed. That wasn't reproduced.
 
 ## Driving the interface from outside
 

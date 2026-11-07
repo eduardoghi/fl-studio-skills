@@ -39,12 +39,16 @@ old code, so a new parameter such as `name` in `fl_channel_set` fails its read b
 ## Working behind other windows
 
 Nothing here takes the keyboard focus or moves the mouse, so FL can sit behind other programs while someone types in
-them. Menus and dialogs still appear above other windows for a moment, because FL opens them that way.
+them. FL opens its menus and dialogs above other programs and raises its main window during an export, so while a
+tool drives the interface, FL and every window it opens are made invisible and let clicks through. Nothing is hidden
+when FL has the focus, since someone is using it then.
 
 - `fl_capture` saves PNGs of the main window and any open menu. Coordinates in a full capture are what `fl_click` and
   `fl_scroll` take.
 - `fl_click` also works inside a plugin's panel. A click on the Playlist grid paints a clip, so don't use it there.
-- `fl_menu_keys` chooses from an open menu. Read the highlighted row with `fl_capture` before sending `enter`.
+- `fl_menu_keys` chooses from an open menu. Read the highlighted row with `fl_capture` before sending `enter`. A menu
+  opened by `fl_click` stays invisible until it is chosen or escaped.
+- `fl_reveal` closes FL's menus and shows its windows again, for when a tool stopped halfway and left FL invisible.
 - `fl_load_plugin` opens a browser row in a new channel, and refuses a row that isn't a plugin.
 - `fl_export` exports the open project, unsaved changes included, and FL stays open. `fl_render` is for when FL is
   closed. It uses what was last saved to disk and works on a copy next to the project, so relative sample paths still
