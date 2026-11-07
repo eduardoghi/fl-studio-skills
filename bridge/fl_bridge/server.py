@@ -6,6 +6,7 @@ import time
 from mcp.server.fastmcp import FastMCP
 
 from . import client, render, window
+from .notes import check as check_notes  # fl_queue_notes has a parameter named notes.
 
 server = FastMCP(
     "fl-bridge",
@@ -235,11 +236,7 @@ def fl_queue_notes(notes: list[dict], expect: str) -> dict:
     of the target channel, from fl_queue_read. The script refuses if the piano roll holds other notes, because
     FL gives no way to read which channel it's showing.
     """
-    for i, note in enumerate(notes):
-        if not 0 <= int(note["pitch"]) <= 127 or float(note["start"]) < 0 or float(note["length"]) <= 0:
-            raise ValueError(f"note {i} is out of range")
-        if not 0 <= float(note.get("velocity", 0.8)) <= 1:
-            raise ValueError(f"note {i} has a velocity outside 0 to 1")
+    check_notes(notes)
     return {
         "request": client.queue_piano_roll("add_notes", {"notes": notes}, expect),
         "next": "run ClaudeBridge in the piano roll",

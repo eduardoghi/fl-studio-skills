@@ -21,7 +21,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bridge"))
 
-from fl_bridge import client, doorbell, paths, render, window
+from fl_bridge import client, doorbell, notes, paths, render, window
 
 SCRIPTS = ROOT / "bridge" / "fl_scripts"
 NOTE = {"pitch": 60, "start": 0, "length": 1}
@@ -596,6 +596,122 @@ class Render(unittest.TestCase):
         with mock.patch.dict(os.environ, {"FL_STUDIO_EXE": "FL64.exe"}):
             render.render(self.project, self.folder / "a.wav", running=lambda: False, run=run)
         self.assertNotEqual(seen[0], str(self.project))
+
+
+class FakePianoRoll:
+    """Plays FL's side of fl_bridge.notes. Each channel keeps its notes, and running the script applies the queue."""
+
+    def __init__(self, folder, channels, pattern=1, script_runs=True):
+        self.folder = folder
+        self.channels = channels
+        self.pattern = pattern
+        self.script_runs = script_runs
+        self.open = None
+        self.writes = 0
+
+    def call(self, command, params=None, timeout=5.0):
+        if command == "pattern_select":
+            self.pattern = params["index"]
+        if command == "project":
+            return {"current_pattern": self.pattern}
+        return {}
+
+    def focus(self, channel):
+        self.open = channel
+
+    def fingerprint(self):
+        return str(sorted(notes._key(n) for n in self.channels[self.open]))
+
+    def run_last_script(self):
+        queue = client.read_json(self.folder / "pianoroll_queue.json")
+        if not self.script_runs or not queue:
+            return
+        expect = queue.get("expect")
+        if expect is not None and expect != self.fingerprint():
+            answer = {"id": queue["id"], "ok": False, "error": "expected fingerprint " + expect}
+        else:
+            if queue["action"] == "clear":
+                self.channels[self.open] = []
+                self.writes += 1
+            elif queue["action"] == "add_notes":
+                # FL keeps velocity in steps of 1/128.
+                added = [
+                    {**n, "velocity": round(round(n.get("velocity", 0.8) * 128) / 128, 3)}
+                    for n in queue["payload"]["notes"]
+                ]
+                self.channels[self.open] = self.channels[self.open] + added
+                self.writes += 1
+            result = {"notes": list(self.channels[self.open]), "fingerprint": self.fingerprint()}
+            answer = {"id": queue["id"], "ok": True, "result": result}
+        client.write_json(self.folder / "pianoroll_done.json", answer)
+        client.write_json(self.folder / "pianoroll_queue.json", {})
+
+
+class Notes(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
+        self.folder = Path(self.tmp.name)
+        patcher = mock.patch.dict(os.environ, {"FL_BRIDGE_PIANO_ROLL_DIR": str(self.folder)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(mock.patch.stopall)
+        mock.patch.object(client, "SETTLE_S", 0).start()
+        mock.patch.object(notes, "RESULT_TIMEOUT_S", 0.05).start()
+
+    def fake(self, channels, **options):
+        fl = FakePianoRoll(self.folder, channels, **options)
+        mock.patch.object(client, "call", fl.call).start()
+        mock.patch.object(client, "focus_piano_roll", fl.focus).start()
+        mock.patch.object(window, "run_last_script", fl.run_last_script).start()
+        return fl
+
+    def test_write_reads_the_notes_back(self):
+        fl = self.fake({2: [], 3: []})
+        want = {2: [NOTE], 3: [{"pitch": 48, "start": 1, "length": 2, "velocity": 0.62}]}
+        report = notes.write(1, want)
+        self.assertEqual(fl.channels[3][0]["velocity"], 0.617)
+        self.assertEqual(report, ["2: 1 notes written and read back", "3: 1 notes written and read back"])
+
+    def test_busy_channel_stops_the_write_before_anything_changes(self):
+        fl = self.fake({2: [], 3: [{"pitch": 70, "start": 0, "length": 1}]})
+        with self.assertRaisesRegex(client.BridgeError, r"channels \[3\]"):
+            notes.write(1, {2: [NOTE], 3: [NOTE]})
+        self.assertEqual(fl.writes, 0)
+        self.assertEqual(fl.channels[2], [])
+
+    def test_replace_clears_a_busy_channel(self):
+        fl = self.fake({3: [{"pitch": 70, "start": 0, "length": 1}]})
+        notes.write(1, {3: [NOTE]}, replace=True)
+        self.assertEqual([n["pitch"] for n in fl.channels[3]], [60])
+
+    def test_notes_already_there_are_left_alone(self):
+        fl = self.fake({2: [NOTE]})
+        self.assertEqual(notes.write(1, {2: [NOTE]}), ["2: already written, 1 notes"])
+        self.assertEqual(fl.writes, 0)
+
+    def test_velocity_counts_in_steps_of_1_128(self):
+        self.assertTrue(notes.same([{**NOTE, "velocity": 0.617}], [{**NOTE, "velocity": 0.62}]))
+        self.assertFalse(notes.same([{**NOTE, "velocity": 0.6}], [{**NOTE, "velocity": 0.62}]))
+
+    def test_script_that_never_runs_leaves_the_queue_empty(self):
+        self.fake({2: []}, script_runs=False)
+        with self.assertRaisesRegex(client.BridgeError, "didn't run on channel 2"):
+            notes.read(1, [2])
+        self.assertFalse(client.read_json(self.folder / "pianoroll_queue.json"))
+
+    def test_wrong_pattern_is_reported(self):
+        fl = self.fake({2: []})
+        fl.call = lambda command, params=None, timeout=5.0: {"current_pattern": 4} if command == "project" else {}
+        mock.patch.object(client, "call", fl.call).start()
+        with self.assertRaisesRegex(client.BridgeError, "pattern 4"):
+            notes.read(1, [2])
+
+    def test_bad_note_is_refused_before_fl_is_touched(self):
+        fl = self.fake({2: []})
+        with self.assertRaisesRegex(ValueError, "note 0"):
+            notes.write(1, {2: [{"pitch": 60, "start": 0, "length": 1, "velocity": 2}]})
+        self.assertIsNone(fl.open)
 
 
 class Paths(unittest.TestCase):

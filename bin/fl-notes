@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Read and write the notes of many channels in FL Studio through the bridge.
+
+  fl-notes read 1 out.json 1 2 3          notes of channels 1, 2 and 3 in pattern 1
+  fl-notes write notes.json 1             write every channel in the file into pattern 1
+  fl-notes write notes.json 1 --replace   clear channels that hold other notes first
+  fl-notes write notes.json 1 --channels 2 4
+
+The file maps channels to notes, {"2": [{"pitch": 60, "start": 0, "length": 1, "velocity": 0.8}]}, and a file
+from read can be written back as it is. Needs FL open with the bridge, and ClaudeBridge run once from
+Tools > Scripts in the piano roll in this FL session.
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bridge"))
+from fl_bridge import client, notes
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest="command", required=True)
+    read = commands.add_parser("read")
+    read.add_argument("pattern", type=int)
+    read.add_argument("output", type=Path)
+    read.add_argument("channels", type=int, nargs="+")
+    write = commands.add_parser("write")
+    write.add_argument("input", type=Path)
+    write.add_argument("pattern", type=int)
+    write.add_argument("--replace", action="store_true")
+    write.add_argument("--channels", type=int, nargs="+")
+    args = parser.parse_args(argv)
+
+    try:
+        if args.command == "read":
+            result = notes.read(args.pattern, args.channels)
+            for c, r in result.items():
+                print(f"{c}: {len(r['notes'])} notes, fingerprint {r['fingerprint']}")
+            args.output.write_text(json.dumps({str(c): r["notes"] for c, r in result.items()}), encoding="utf-8")
+        else:
+            data = {int(c): n for c, n in json.loads(args.input.read_text(encoding="utf-8")).items()}
+            if args.channels:
+                missing = set(args.channels) - set(data)
+                if missing:
+                    parser.error(f"channels {sorted(missing)} aren't in {args.input}")
+                data = {c: data[c] for c in args.channels}
+            for line in notes.write(args.pattern, data, args.replace):
+                print(line)
+    except (client.BridgeError, ValueError, OSError) as error:
+        sys.exit(f"fl-notes: {error}")
+
+
+if __name__ == "__main__":
+    main()

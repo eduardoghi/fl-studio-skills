@@ -86,6 +86,12 @@ the mixer track and slot goes from 0 to 9.
 - Nothing in the API starts a piano roll script. Ctrl+Alt+Y runs the last one again, after a first run from
   Tools > Scripts in that session. See "Working without focus" for pressing it with FL behind other windows.
 
+For dozens or hundreds of notes, `bin/fl-notes` in this repository talks to the bridge from Python instead of
+passing every note through `fl_queue_notes`. `fl-notes read` saves channels of a pattern to a JSON file, and
+`fl-notes write` writes such a file back. It reads every channel before writing any, so a channel holding other notes
+stops the whole write, and it reads each channel back after writing it. Velocity is compared in FL's steps of 1/128,
+since 0.62 reads back as 0.617. The same functions are in `fl_bridge.notes` for scripts that build their notes.
+
 ## Rendering
 
 `FL64.exe /R<output.wav> /Ewav /O<folder> project.flp` opens a separate FL, renders and closes. It took 18 s for
