@@ -1,7 +1,7 @@
 {
     "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
     "name": "fl-studio-skills",
-    "description": "Skills for producing music in FL Studio with Claude Code",
+    "description": "Skills for producing music in FL Studio with Claude Code: music composition, audio verification, FL Studio scripting and plugin notes",
     "owner": {
         "name": "Eduardo Hillesheim"
     },
@@ -9,7 +9,7 @@
         {
             "name": "fl-studio-skills",
             "source": "./",
-            "description": "Audio verification, FL Studio scripting and plugin notes"
+            "description": "Music composition, audio verification, FL Studio scripting and plugin notes"
         }
     ]
 }
