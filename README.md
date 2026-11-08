@@ -37,6 +37,8 @@ scripts inside FL Studio.
   including its file restrictions, callbacks and how to drive the interface from outside, with or without focus.
 
 - `skills/fl-plugins`: notes per plugin on what the controls do, defaults that cause trouble and parameter names.
+- `skills/music-composition`: develop a musical idea through one intentional change at a time, and compare
+  versions by listening instead of by adding layers.
 
 ## Scripts
 
