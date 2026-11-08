@@ -187,5 +187,9 @@ shortcuts and a file path into another program.
   it landed.
 - An instrument dragged from the browser to the empty area of the Channel Rack gets a new channel, and it feeds the
   Master. To add an effect, select the mixer track first and drag the plugin onto a slot.
+- `Send to selected channel or focused plugin`, in the right-click menu of an effect's row in the browser, puts the
+  effect on the mixer track of the channel selected in the Channel Rack, not on the track selected in the mixer. With
+  a plugin window open and focused, it added nothing to the selected channel's track. Close plugin windows, select the
+  channel, send, and read the mixer to confirm where the effect landed.
 - Delete on a channel or a mixer slot opens a `Confirm` window with Ok and Cancel. Plugin windows stay open behind the
   panels, and raising the Channel Rack by its header reaches the channels under them.
