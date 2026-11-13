@@ -48,6 +48,9 @@ scripts inside FL Studio.
   back. For more notes than are worth passing through the MCP tools.
 - `bridge/`: `fl-bridge`, an MCP server that controls the project open in FL Studio. See `bridge/README.md`.
 
+`wav-check` needs `numpy`. Windows runs a script by its extension and ignores the `#!` line, so each script has a
+`.cmd` next to it that runs it with `python`. Put `bin\` on `PATH` to run them by name.
+
 ## Tests
 
 ```sh
