@@ -17,11 +17,13 @@ Read only the file of the plugin in use:
 | Ample Guitar SC | `plugins/ample-guitar-sc.md` | Keyswitches are notes in the same piano roll |
 | Omnisphere 3 | `plugins/omnisphere.md` | Patches change the octave, and choosing one needs the interface |
 | ValhallaVintageVerb | `plugins/valhalla-vintageverb.md` | Starts at 100% mix |
-| EZdrummer 3 | `plugins/ezdrummer-3.md` | Almost nothing is reachable through the bridge |
+| EZdrummer 3 | `plugins/ezdrummer-3.md` | Note map measured, and its menus need FL in front |
+| EZbass | `plugins/ezbass.md` | FL can load an old VST2 build instead of the VST3 |
+| Evolution (Orange Tree) | `plugins/evolution.md` | Overlapping notes a tone apart become legato, even on different strings |
 | Kontakt 8 | `plugins/kontakt.md` | Libraries are in Classic View, and `DEMO` marks an unregistered library |
 
 Each file says where its facts come from. "Manual" means the maker's documentation, in our own words. "Observed" means
-FL Studio 26.1.4 on one machine. The values are what one guitar track used, so they are starting points to measure and
+FL Studio 26.1.4 or 26.1.7 on one machine, as each file states. The values are what one guitar track used, so they are starting points to measure and
 not targets.
 
 ## Working with a plugin
