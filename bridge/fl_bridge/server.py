@@ -5,7 +5,7 @@ import time
 
 from mcp.server.fastmcp import FastMCP
 
-from . import client, render, window
+from . import client, midifile, render, window
 from .notes import check as check_notes  # fl_queue_notes has a parameter named notes.
 
 server = FastMCP(
@@ -302,16 +302,18 @@ def fl_capture(folder: str | None = None, region: list[int] | None = None) -> li
 
 
 @server.tool()
-def fl_click(x: int, y: int, button: str = "left", focus: bool = False) -> dict:
+def fl_click(x: int, y: int, button: str = "left", focus: bool = False, expect: str | None = None) -> dict:
     """Click a point of the main window without moving the mouse. button is left or right.
 
     x and y come from an fl_capture of the whole window. A click on the Playlist grid paints a clip, and a click on an
     FL menu item only closes the menu, so use fl_menu_keys there. A point inside a popup from fl_capture goes to it,
     which is how a row of a plugin's menu is chosen. focus brings FL to the front first and takes the keyboard from
     the program in use. Menus drawn with JUCE, as in EZdrummer 3 and EZbass, close as soon as FL leaves the front, so
-    pass focus both to open one and to click its row.
+    pass focus both to open one and to click its row. expect is part of the class of the window that should be under
+    the point, such as JUCE for a Toontrack plugin or TEventEditForm for the piano roll. Without a match nothing is
+    clicked, so a closed plugin window can't let a click through to the Playlist, where it would paint a clip.
     """
-    return window.click(x, y, button, focus)
+    return window.click(x, y, button, focus, expect)
 
 
 @server.tool()
@@ -384,24 +386,50 @@ def fl_set_ppq(ppq: int) -> dict:
     return {"before": before, "after": after}
 
 
+DEFAULT_PATTERN_NAME = re.compile(r"Pattern \d+")
+
+
+def import_refusal(state):
+    """Return why an import could change data the project already holds, or None when it looks empty.
+
+    FL's import reuses channels from channel 0 on and renames them, so only one channel without a plugin and
+    patterns that all keep their default name and length count as empty. A sample loaded in that channel isn't
+    visible to the API, which is the case this check can't see.
+    """
+    channels, patterns = state["channels"], state["patterns"]
+    if len(channels) > 1:
+        return f"the project has {len(channels)} channels, which the import would rename and reuse"
+    if channels and channels[0]["plugin"] is not None:
+        return f"channel 0 holds {channels[0]['plugin']}, which the import would rename and reuse"
+    used = [p["name"] for p in patterns if not DEFAULT_PATTERN_NAME.fullmatch(p["name"]) or p["length"] != 16]
+    if used:
+        return f"patterns {used} hold data, and the import would rename the channel their notes belong to"
+    return None
+
+
 @server.tool()
 def fl_import_midi(
-    path: str, allow_existing_channels: bool = False, realign_events: bool = False, import_time_signatures: bool = True
+    path: str,
+    allow_existing_channels: bool = False,
+    realign_events: bool = False,
+    import_time_signatures: bool = True,
+    import_zero_velocity: bool = False,
 ) -> dict:
     """Import a MIDI file into the open project, into a new empty pattern, and report what changed.
 
-    Never starts a new project, so the project's PPQ and channels stay. FL's import reuses the channels from
-    channel 0 on, renaming them after the MIDI tracks, so a project that already has more than one channel is
-    refused unless allow_existing_channels is true. Notes go to the current pattern, so an unused pattern after the
-    last one is selected first. FL rounds the MIDI tempo to a whole BPM, so set the tempo afterwards with
-    fl_set_tempo. Returns the project state before and after, the options read on the form, and the new pattern.
+    Never starts a new project, so the project's PPQ stays. FL's import reuses the channels from channel 0 on,
+    renaming them after the MIDI tracks, so a project that doesn't look empty is refused unless
+    allow_existing_channels is true. The file is checked before anything changes. Notes go to the current pattern, so
+    an unused pattern after the last one is selected first. Every option of the import form is set, none is left to
+    FL's previous state. FL rounds the MIDI tempo to a whole BPM, so set the tempo afterwards with fl_set_tempo.
+    Returns the project state before and after, the options read on the form, the new pattern and warnings. A
+    warning means another pattern changed, so stop and look before going on.
     """
+    midi = midifile.check(path)
     before = _project_state()
-    if len(before["channels"]) > 1 and not allow_existing_channels:
-        raise ValueError(
-            f"the project has {len(before['channels'])} channels, and FL's MIDI import would rename and reuse them. "
-            "Import into an empty project, or pass allow_existing_channels"
-        )
+    refusal = import_refusal(before)
+    if refusal and not allow_existing_channels:
+        raise ValueError(f"{refusal}. Import into an empty project, or pass allow_existing_channels")
     target = before["project"]["patterns"] + 1
     client.call("pattern_select", {"index": target})
     client.settled("project", {}, check={"current_pattern": target})
@@ -413,6 +441,7 @@ def fl_import_midi(
             "import_time_signatures": import_time_signatures,
             "one_channel_per_track": True,
             "set_mixer_tracks": True,
+            "import_zero_velocity": import_zero_velocity,
         },
     )
     after = _project_state()
@@ -420,7 +449,16 @@ def fl_import_midi(
         raise client.BridgeError(f"the PPQ changed from {before['project']['ppq']} to {after['project']['ppq']}")
     untouched = [p for p in before["patterns"] if p["index"] != target]
     changed = [p for p in untouched if p not in after["patterns"]]
-    return {"pattern": target, "options": options, "before": before, "after": after, "other_patterns_changed": changed}
+    warnings = [f"pattern {p['index']} ({p['name']}) changed during the import" for p in changed]
+    return {
+        "pattern": target,
+        "midi": midi,
+        "options": options,
+        "before": before,
+        "after": after,
+        "other_patterns_changed": changed,
+        "warnings": warnings,
+    }
 
 
 @server.tool()

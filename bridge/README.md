@@ -46,6 +46,8 @@ when FL has the focus, since someone is using it then.
 - `fl_capture` saves PNGs of the main window and any open menu. Coordinates in a full capture are what `fl_click` and
   `fl_scroll` take.
 - `fl_click` also works inside a plugin's panel. A click on the Playlist grid paints a clip, so don't use it there.
+  Pass `expect` with part of the class of the window that should be under the point, such as `JUCE` for a Toontrack
+  plugin, and nothing is clicked when something else is there.
 - `fl_capture` also saves FL's other windows, such as a plugin's menu or a dialog, as `popup-N` with their screen
   position, and `fl_click` sends a point inside one of them to it. Menus drawn with JUCE, as in EZdrummer 3 and EZbass,
   close as soon as FL leaves the front, so set `focus` both to open one and to click its row. That brings FL to the
@@ -56,9 +58,10 @@ when FL has the focus, since someone is using it then.
 - `fl_load_plugin` opens a browser row in a new channel, and refuses a row that isn't a plugin.
 - `fl_set_ppq` sets the timebase in Options > Project general settings and reads it back. `fl_import_midi` imports a
   MIDI file through FILE > Import > MIDI file into a new empty pattern of the open project, reads and sets each
-  option of the import form before Accept, and returns the project's state before and after. It never starts a new
-  project, and it refuses a project with more than one channel unless told otherwise, because FL's import renames
-  and reuses the channels from channel 0 on. Set 960 PPQ first to keep fine timing, and set the tempo afterwards,
+  option of the import form before Accept, and returns the project's state before and after, with a warning when
+  another pattern changed. It checks the file first, never starts a new project, and refuses a project that doesn't
+  look empty (more than one channel, a plugin on channel 0, or a pattern with data) unless told otherwise, because
+  FL's import renames and reuses the channels from channel 0 on. Set 960 PPQ first to keep fine timing, and set the tempo afterwards,
   since FL rounds the MIDI tempo to a whole BPM.
 - `fl_export` exports the open project, unsaved changes included, and FL stays open. `fl_render` is for when FL is
   closed. It uses what was last saved to disk and works on a copy next to the project, so relative sample paths still

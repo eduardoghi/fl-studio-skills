@@ -474,6 +474,11 @@ class Window(unittest.TestCase):
         pixels, width = self.capture_with((70, 70, 70))
         self.assertFalse(window.radio_is_on(pixels, width, (5, 5)))
 
+    def test_expected_window_matches_part_of_the_class(self):
+        self.assertTrue(window.expected_window("JUCE_1a1d788206b", "juce"))
+        self.assertFalse(window.expected_window("TEventEditForm", "JUCE"))
+        self.assertTrue(window.expected_window("TEventEditForm", None))
+
     def test_ppq_keys_count_rows_of_the_list(self):
         self.assertEqual(window.ppq_keys(96, 960), ["down"] * 7)
         self.assertEqual(window.ppq_keys(960, 96), ["up"] * 7)
@@ -833,3 +838,125 @@ class Server(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def midi_bytes(tracks=1, declared=None, division=960):
+    track = b"MTrk" + struct.pack(">I", 4) + b"\x00\xff\x2f\x00"
+    header = b"MThd" + struct.pack(">IHHH", 6, 1, declared if declared is not None else tracks, division)
+    return header + track * tracks
+
+
+class MidiFile(unittest.TestCase):
+    def write(self, data):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "song.mid"
+        path.write_bytes(data)
+        return path
+
+    def test_reads_format_tracks_and_ppq(self):
+        from fl_bridge import midifile
+
+        self.assertEqual(midifile.check(self.write(midi_bytes(3))), {"format": 1, "tracks": 3, "ppq": 960})
+
+    def test_refuses_what_fl_would_misread(self):
+        from fl_bridge import midifile
+
+        cases = {
+            "isn't a standard MIDI file": b"RIFF" + bytes(20),
+            "SMPTE": midi_bytes(division=0xE728),
+            "declares 2 tracks and holds 1": midi_bytes(1, declared=2),
+            "truncated": midi_bytes(1)[:-2],
+        }
+        for message, data in cases.items():
+            with self.subTest(message), self.assertRaisesRegex(midifile.MidiFileError, message):
+                midifile.check(self.write(data))
+        with self.assertRaisesRegex(midifile.MidiFileError, "doesn't exist"):
+            midifile.check(Path(tempfile.gettempdir()) / "no-such-file.mid")
+
+
+class ImportMidi(unittest.TestCase):
+    """The import tool's safeguards, with FL and its windows faked."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from fl_bridge import server
+        except ImportError:
+            raise unittest.SkipTest("the server needs the mcp package") from None
+        cls.server = server
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.midi = Path(tmp.name) / "song.mid"
+        self.midi.write_bytes(midi_bytes(2))
+        self.channels = [{"name": "Sampler", "plugin": None}]
+        self.patterns = [{"index": 1, "name": "Pattern 1", "length": 16}]
+        self.ppq_after = 960
+        self.calls = []
+        self.addCleanup(mock.patch.stopall)
+        mock.patch.object(client, "call", self.call).start()
+        mock.patch.object(client, "settled", lambda command, params, check=None: self.call(command, params)).start()
+        self.importer = mock.patch.object(window, "import_midi", side_effect=self.fake_import).start()
+        self.imported = False
+
+    def call(self, command, params=None, timeout=5.0):
+        self.calls.append(command)
+        if command == "project":
+            ppq = self.ppq_after if self.imported else 960
+            return {"ppq": ppq, "patterns": len(self.patterns), "current_pattern": len(self.patterns) + 1}
+        if command == "channel_list":
+            return self.channels
+        if command == "pattern_list":
+            return {"patterns": [dict(p) for p in self.patterns]}
+        return {}
+
+    def fake_import(self, path, options):
+        self.imported = True
+        self.options = options
+        return dict(options)
+
+    def test_an_empty_project_imports_into_the_next_pattern_with_every_option_set(self):
+        result = self.server.fl_import_midi(str(self.midi))
+        self.assertEqual(result["pattern"], 2)
+        self.assertEqual(result["warnings"], [])
+        self.assertEqual(set(self.options), set(window.MIDI_IMPORT_OPTIONS))
+        self.assertFalse(self.options["start_new_project"])
+        self.assertFalse(self.options["import_zero_velocity"])
+
+    def test_a_bad_file_is_refused_before_anything_changes(self):
+        self.midi.write_bytes(b"not midi")
+        with self.assertRaises(ValueError):
+            self.server.fl_import_midi(str(self.midi))
+        self.assertEqual(self.calls, [])
+        self.importer.assert_not_called()
+
+    def test_a_project_with_data_is_refused_unless_allowed(self):
+        cases = {
+            "2 channels": ([{"name": "A", "plugin": None}, {"name": "B", "plugin": None}], self.patterns),
+            "holds Kontakt": ([{"name": "Guitar", "plugin": "Kontakt 8"}], self.patterns),
+            "hold data": (self.channels, [{"index": 1, "name": "Verse", "length": 64}]),
+        }
+        for message, (channels, patterns) in cases.items():
+            with self.subTest(message):
+                self.channels, self.patterns = channels, patterns
+                with self.assertRaisesRegex(ValueError, message):
+                    self.server.fl_import_midi(str(self.midi))
+                self.importer.assert_not_called()
+        self.server.fl_import_midi(str(self.midi), allow_existing_channels=True)
+        self.importer.assert_called_once()
+
+    def test_a_changed_pattern_is_reported(self):
+        def change_pattern_1(path, options):
+            self.patterns[0]["length"] = 32
+            return self.fake_import(path, options)
+
+        self.importer.side_effect = change_pattern_1
+        result = self.server.fl_import_midi(str(self.midi))
+        self.assertEqual(result["warnings"], ["pattern 1 (Pattern 1) changed during the import"])
+
+    def test_a_changed_ppq_is_an_error(self):
+        self.ppq_after = 96
+        with self.assertRaisesRegex(client.BridgeError, "PPQ changed"):
+            self.server.fl_import_midi(str(self.midi))

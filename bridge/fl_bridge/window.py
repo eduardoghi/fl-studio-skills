@@ -304,6 +304,7 @@ def _api():
     user32.SendMessageW.argtypes = [hwnd, wintypes.UINT, wintypes.WPARAM, wintypes.LPCWSTR]
     user32.SendMessageW.restype = ctypes.c_ssize_t
     user32.SetForegroundWindow.argtypes = [hwnd]
+    user32.BringWindowToTop.argtypes = [hwnd]
     user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
     user32.GetParent.argtypes = [hwnd]
     user32.GetParent.restype = hwnd
@@ -688,37 +689,54 @@ def popups(main=None):
 def focus_main(main):
     """Bring FL to the front, taking the keyboard focus from the program in use.
 
-    Windows lets only the process that received the last input change the foreground window, so a synthetic Alt
-    press goes first. Without it SetForegroundWindow failed about half the time.
+    Windows lets only the process that received the last input change the foreground window. A synthetic Alt press
+    alone worked about half the time, and failed three times in a row with a browser in front. Attaching to the
+    input of the foreground window's thread for the call, as well, brought FL up each time it was tried.
     """
-    user32, _, _ = _api()
-    for _ in range(3):
-        if user32.GetForegroundWindow() == main:
+    user32, _, kernel32 = _api()
+    ours = kernel32.GetCurrentThreadId()
+    for _ in range(5):
+        front = user32.GetForegroundWindow()
+        if front == main:
             return
+        theirs = user32.GetWindowThreadProcessId(front, None) if front else 0
         user32.keybd_event(VK_MENU, 0, 0, 0)
         user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
-        user32.SetForegroundWindow(main)
+        attached = bool(theirs) and theirs != ours and user32.AttachThreadInput(ours, theirs, True)
+        try:
+            user32.SetForegroundWindow(main)
+            user32.BringWindowToTop(main)
+        finally:
+            if attached:
+                user32.AttachThreadInput(ours, theirs, False)
         time.sleep(0.2)
     if user32.GetForegroundWindow() != main:
         raise WindowError("Windows didn't let FL come to the front")
 
 
-def click(x, y, button="left", focus=False):
+def expected_window(class_name, expect):
+    """Whether the window class at a point matches what the caller meant to click. None accepts anything."""
+    return expect is None or expect.lower() in class_name.lower()
+
+
+def click(x, y, button="left", focus=False, expect=None):
     """Click at a point relative to the main window, the same coordinates as a capture.
 
     A point inside one of FL's popups goes to that popup. focus brings FL to the front first, because menus drawn
     with JUCE, such as the kit list of EZdrummer 3, close as soon as FL leaves the front. A menu opened with focus
     was gone by the next call once the person clicked in another program, so the click on its row needs focus too.
+    expect is part of the class of the window that should be under the point, such as `JUCE` for a Toontrack plugin.
+    Without a match nothing is clicked. A plugin window closed between a capture and a click left the Playlist under
+    the point once, and the click painted a clip there.
     """
+    if expect is not None:
+        _check_target(x, y, expect)
     if focus:
         focus_main(main_window())
-    return _click(x, y, button)
+    return _click(x, y, button, expect)
 
 
-@_shielded()
-def _click(x, y, button):
-    main = main_window()
-    _require_visible(main)
+def _target_at(main, x, y):
     left, top, width, height = _rect(main)
     screen_x, screen_y = left + x, top + y
     root = next((p for p in popups(main) if inside(_rect(p), screen_x, screen_y)), None)
@@ -726,6 +744,24 @@ def _click(x, y, button):
         if not (0 <= x < width and 0 <= y < height):
             raise WindowError(f"({x}, {y}) is outside FL's {width}x{height} window")
         root = main
+    return root, screen_x, screen_y
+
+
+def _check_target(x, y, expect):
+    main = main_window()
+    root, screen_x, screen_y = _target_at(main, x, y)
+    target, _, _ = _deepest(root, screen_x, screen_y)
+    if not expected_window(_class(target), expect):
+        raise WindowError(f"({x}, {y}) is over {_class(target)}, not {expect}. Nothing was clicked")
+
+
+@_shielded()
+def _click(x, y, button, expect=None):
+    main = main_window()
+    _require_visible(main)
+    if expect is not None:
+        _check_target(x, y, expect)
+    root, screen_x, screen_y = _target_at(main, x, y)
     target = _post_click(root, screen_x, screen_y, button)
     time.sleep(0.3)
     return {"window": _class(target), "menus": len(open_menus(main)), "popups": len(popups(main))}

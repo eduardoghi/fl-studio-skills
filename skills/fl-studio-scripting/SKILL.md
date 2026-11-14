@@ -153,8 +153,14 @@ and Ctrl+R both worked sent to the piano roll, and Ctrl+Alt+Y did nothing sent t
   FL's process, so capture them on their own.
 - EZdrummer 3 and EZbass draw their menus with JUCE, as `JUCE_...` windows with four 12 pixel shadow windows around
   them. With FL in the background the menu closed before it could be seen, so the kit and bass selectors only worked
-  with FL brought to the front first. Windows only lets the process with the last input change the foreground, and
-  `SetForegroundWindow` failed about half the time until a synthetic Alt press went first. The menu stayed open between
+  with FL brought to the front first. Windows only lets the process with the last input change the foreground.
+  `SetForegroundWindow` after a synthetic Alt press worked about half the time and failed three times in a row with a
+  browser in front, and attaching to the input of the foreground window's thread as well made it work. Nothing
+  brings FL forward while the session is locked, when the foreground window is the lock screen.
+- A capture goes stale when a plugin window closes. A click meant for EZdrummer's kit selector, sent after its
+  window was closed, landed on the Playlist and painted a clip. `fl_click` takes `expect` to check the class of the
+  window under the point first. The Playlist and the piano roll are both `TEventEditForm`, so it can't tell those
+  two apart. The menu stayed open between
   calls while FL kept the front, and a posted click on a row chose it. When the person clicked in another program in
   between, the menu was gone, so the click on the row brings FL to the front again.
 - A posted click on the Velocity and Mapping tabs of EZdrummer's `E-Drums/MIDI In` panel did nothing, even with FL in
