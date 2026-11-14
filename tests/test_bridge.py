@@ -216,7 +216,8 @@ class PianoRollScript(unittest.TestCase):
         self.addCleanup(os.chdir, self.previous)
 
     def run_script(self, queue, velocity=0.5):
-        (self.folder / "pianoroll_queue.json").write_text(json.dumps(queue))
+        if queue is not None:
+            (self.folder / "pianoroll_queue.json").write_text(json.dumps(queue))
         score = types.SimpleNamespace(PPQ=96, noteCount=1, added=[])
         score.addNote = score.added.append
         score.clearNotes = lambda everything: None
@@ -276,9 +277,15 @@ class PianoRollScript(unittest.TestCase):
         self.assertFalse(self.done()["ok"])
         self.assertEqual((self.folder / "pianoroll_queue.json").read_text(), "{}")
 
-    def test_empty_queue_tells_the_user(self):
-        _, messages = self.run_script({})
-        self.assertIn("nothing queued", messages[0])
+    def test_empty_queue_does_nothing_quietly(self):
+        score, messages = self.run_script({})
+        self.assertEqual((score.added, messages), ([], []))
+        self.assertFalse((self.folder / "pianoroll_done.json").exists())
+
+    def test_missing_queue_does_nothing_quietly(self):
+        score, messages = self.run_script(None)
+        self.assertEqual((score.added, messages), ([], []))
+        self.assertFalse((self.folder / "pianoroll_done.json").exists())
 
 
 class Client(unittest.TestCase):
@@ -455,6 +462,16 @@ class Window(unittest.TestCase):
         self.assertFalse(window.is_fl(r"C:\Windows\explorer.exe"))
         self.assertFalse(window.is_fl(""))
 
+    def test_inside_excludes_the_right_and_bottom_edges(self):
+        self.assertTrue(window.inside((10, 20, 100, 50), 10, 20))
+        self.assertFalse(window.inside((10, 20, 100, 50), 110, 30))
+        self.assertFalse(window.inside((10, 20, 100, 50), 50, 70))
+
+    def test_popup_size_leaves_out_menu_shadows(self):
+        self.assertTrue(window.popup_size((424, 316, 199, 191)))
+        self.assertFalse(window.popup_size((424, 507, 199, 12)))
+        self.assertFalse(window.popup_size((623, 304, 12, 215)))
+
     def test_click_param_keeps_negative_coordinates(self):
         self.assertEqual(window.click_param(135, 629), (629 << 16) | 135)
         self.assertEqual(window.click_param(-1, 0), 0xFFFF)
@@ -601,11 +618,12 @@ class Render(unittest.TestCase):
 class FakePianoRoll:
     """Plays FL's side of fl_bridge.notes. Each channel keeps its notes, and running the script applies the queue."""
 
-    def __init__(self, folder, channels, pattern=1, script_runs=True):
+    def __init__(self, folder, channels, pattern=1, script_runs=True, ppq=960):
         self.folder = folder
         self.channels = channels
         self.pattern = pattern
         self.script_runs = script_runs
+        self.ppq = ppq
         self.open = None
         self.writes = 0
 
@@ -613,14 +631,14 @@ class FakePianoRoll:
         if command == "pattern_select":
             self.pattern = params["index"]
         if command == "project":
-            return {"current_pattern": self.pattern}
+            return {"current_pattern": self.pattern, "ppq": self.ppq}
         return {}
 
     def focus(self, channel):
         self.open = channel
 
     def fingerprint(self):
-        return str(sorted(notes._key(n) for n in self.channels[self.open]))
+        return str(sorted(notes._key(n, self.ppq) for n in self.channels[self.open]))
 
     def run_last_script(self):
         queue = client.read_json(self.folder / "pianoroll_queue.json")
@@ -634,9 +652,14 @@ class FakePianoRoll:
                 self.channels[self.open] = []
                 self.writes += 1
             elif queue["action"] == "add_notes":
-                # FL keeps velocity in steps of 1/128.
+                # FL rounds times to the project's PPQ and keeps velocity in steps of 1/128.
                 added = [
-                    {**n, "velocity": round(round(n.get("velocity", 0.8) * 128) / 128, 3)}
+                    {
+                        **n,
+                        "start": round(n["start"] * self.ppq) / self.ppq,
+                        "length": round(n["length"] * self.ppq) / self.ppq,
+                        "velocity": round(round(n.get("velocity", 0.8) * 128) / 128, 3),
+                    }
                     for n in queue["payload"]["notes"]
                 ]
                 self.channels[self.open] = self.channels[self.open] + added
@@ -691,8 +714,14 @@ class Notes(unittest.TestCase):
         self.assertEqual(fl.writes, 0)
 
     def test_velocity_counts_in_steps_of_1_128(self):
-        self.assertTrue(notes.same([{**NOTE, "velocity": 0.617}], [{**NOTE, "velocity": 0.62}]))
-        self.assertFalse(notes.same([{**NOTE, "velocity": 0.6}], [{**NOTE, "velocity": 0.62}]))
+        self.assertTrue(notes.same([{**NOTE, "velocity": 0.617}], [{**NOTE, "velocity": 0.62}], 960))
+        self.assertFalse(notes.same([{**NOTE, "velocity": 0.6}], [{**NOTE, "velocity": 0.62}], 960))
+
+    def test_times_count_in_ticks_of_the_project(self):
+        fl = self.fake({2: []}, ppq=96)
+        report = notes.write(1, {2: [{"pitch": 38, "start": 0, "length": 3.9, "velocity": 0.62}]})
+        self.assertAlmostEqual(fl.channels[2][0]["length"], 374 / 96)
+        self.assertEqual(report, ["2: 1 notes written and read back"])
 
     def test_script_that_never_runs_leaves_the_queue_empty(self):
         self.fake({2: []}, script_runs=False)

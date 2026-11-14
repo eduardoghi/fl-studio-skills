@@ -24,6 +24,8 @@ from pathlib import Path, PureWindowsPath
 
 WM_SETTEXT = 0x000C
 WM_CLOSE = 0x0010
+WM_COMMAND = 0x0111
+EN_CHANGE = 0x0300
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
 WM_SYSKEYDOWN = 0x0104
@@ -94,6 +96,8 @@ GA_ROOT = 2
 PM_REMOVE = 1
 RDW_REPAINT = 0x0001 | 0x0004 | 0x0080 | 0x0400  # Invalidate, erase, all children, frame.
 FL_PROCESSES = ("fl64.exe", "fl.exe")
+KEYEVENTF_KEYUP = 0x0002
+POPUP_MIN_SIZE = 24  # The shadow windows of a JUCE menu were 12 pixels thick.
 KEY_GAP_S = 0.05
 SHIELD_JOIN_S = 15.0  # The hook thread only stops between messages, and FL can hold one for seconds.
 POLL_S = 0.1
@@ -151,6 +155,15 @@ def is_ghost(style):
 def unghosted(style):
     """Drop the ghost bits from a style whose original is unknown. FL's own windows had neither bit."""
     return style & ~GHOST_STYLE
+
+
+def inside(rect, x, y):
+    left, top, width, height = rect
+    return left <= x < left + width and top <= y < top + height
+
+
+def popup_size(rect):
+    return rect[2] >= POPUP_MIN_SIZE and rect[3] >= POPUP_MIN_SIZE
 
 
 def centered(outer, inner):
@@ -244,6 +257,10 @@ def _api():
     user32.PostMessageW.argtypes = [hwnd, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user32.SendMessageW.argtypes = [hwnd, wintypes.UINT, wintypes.WPARAM, wintypes.LPCWSTR]
     user32.SendMessageW.restype = ctypes.c_ssize_t
+    user32.SetForegroundWindow.argtypes = [hwnd]
+    user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
+    user32.GetParent.argtypes = [hwnd]
+    user32.GetParent.restype = hwnd
     user32.RealChildWindowFromPoint.argtypes = [hwnd, wintypes.POINT]
     user32.RealChildWindowFromPoint.restype = hwnd
     user32.PrintWindow.argtypes = [hwnd, wintypes.HDC, wintypes.UINT]
@@ -610,17 +627,62 @@ def _post_click(root, screen_x, screen_y, button="left"):
     return target
 
 
+def popups(main=None):
+    """Return FL's other top-level windows, such as a plugin's menu or a dialog, from the front to the back.
+
+    FL's own menus are left to open_menus. JUCE draws the shadow of its menus as windows a few pixels thick around
+    them, and popup_size leaves those out.
+    """
+    main = main or main_window()
+    pid = _process_id(main)
+    skip = (CLASS_MAIN, CLASS_APPLICATION, CLASS_FL_MENU, CLASS_NATIVE_MENU)
+    return [w for w in _top_windows() if _process_id(w) == pid and _class(w) not in skip and popup_size(_rect(w))]
+
+
+def focus_main(main):
+    """Bring FL to the front, taking the keyboard focus from the program in use.
+
+    Windows lets only the process that received the last input change the foreground window, so a synthetic Alt
+    press goes first. Without it SetForegroundWindow failed about half the time.
+    """
+    user32, _, _ = _api()
+    for _ in range(3):
+        if user32.GetForegroundWindow() == main:
+            return
+        user32.keybd_event(VK_MENU, 0, 0, 0)
+        user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+        user32.SetForegroundWindow(main)
+        time.sleep(0.2)
+    if user32.GetForegroundWindow() != main:
+        raise WindowError("Windows didn't let FL come to the front")
+
+
+def click(x, y, button="left", focus=False):
+    """Click at a point relative to the main window, the same coordinates as a capture.
+
+    A point inside one of FL's popups goes to that popup. focus brings FL to the front first, because menus drawn
+    with JUCE, such as the kit list of EZdrummer 3, close as soon as FL leaves the front. A menu opened with focus
+    was gone by the next call once the person clicked in another program, so the click on its row needs focus too.
+    """
+    if focus:
+        focus_main(main_window())
+    return _click(x, y, button)
+
+
 @_shielded()
-def click(x, y, button="left"):
-    """Click at a point relative to the main window, the same coordinates as a capture."""
+def _click(x, y, button):
     main = main_window()
     _require_visible(main)
     left, top, width, height = _rect(main)
-    if not (0 <= x < width and 0 <= y < height):
-        raise WindowError(f"({x}, {y}) is outside FL's {width}x{height} window")
-    target = _post_click(main, left + x, top + y, button)
+    screen_x, screen_y = left + x, top + y
+    root = next((p for p in popups(main) if inside(_rect(p), screen_x, screen_y)), None)
+    if root is None:
+        if not (0 <= x < width and 0 <= y < height):
+            raise WindowError(f"({x}, {y}) is outside FL's {width}x{height} window")
+        root = main
+    target = _post_click(root, screen_x, screen_y, button)
     time.sleep(0.3)
-    return {"window": _class(target), "menus": len(open_menus(main))}
+    return {"window": _class(target), "menus": len(open_menus(main)), "popups": len(popups(main))}
 
 
 def scroll(x, y, notches):
@@ -716,17 +778,23 @@ def run_last_script():
 
 
 def capture(folder=None, region=None):
-    """Save PNGs of the main window and any open menu, and return where each one is.
+    """Save PNGs of the main window, any open menu and FL's other windows, and return where each one is.
 
-    region is (x, y, width, height) in the main window. It works behind other windows, not while minimized.
+    region is (x, y, width, height) in the main window. It works behind other windows, not while minimized. The
+    other windows are plugin menus and dialogs, which a capture of the main window leaves out even when one of them
+    blocks FL, as a script's error box did.
     """
     main = main_window()
     _require_visible(main)
     folder = Path(folder) if folder else Path(tempfile.gettempdir()) / "fl-bridge"
     folder.mkdir(parents=True, exist_ok=True)
     shots = []
-    for position, window in enumerate([main, *open_menus(main)]):
-        name = "main" if window == main else f"menu-{position}"
+    menus = open_menus(main)
+    for position, window in enumerate([main, *menus, *popups(main)]):
+        if window == main:
+            name = "main"
+        else:
+            name = f"menu-{position}" if window in menus else f"popup-{position}"
         left, top, width, height = _rect(window)
         pixels = _grab(window, width, height)
         if window == main and region:
@@ -847,21 +915,24 @@ def _open_export_dialog(main):
     """Choose FILE > Export > Wave file with keys.
 
     Ctrl+R opened the same dialog, but holding Ctrl means attaching to FL's input, and FL then came in front of the
-    window with the focus. A row above Export can become enabled, so a wrong submenu gets one more try a row lower.
+    window with the focus. The disabled rows above Export change with the project. One more can become enabled, and
+    in a project that was never saved `Delete unused files and save project` is disabled too, so Export took 10 down
+    presses on 26.1.7. A wrong count gets the menu closed and opened again with the next one, because `right` on a
+    row without a submenu moves to the next menu of the menu bar and the keys after it would act there.
     """
     left, top, _, _ = _rect(main)
-    _post_click(main, left + FILE_MENU[0], top + FILE_MENU[1])
-    _wait(lambda: open_menus(main), 3, "the FILE menu didn't open")
-    time.sleep(0.3)
-    menu_keys(["down"] * FILE_MENU_EXPORT_DOWNS + ["right"])
-    time.sleep(0.3)
-    if not _export_menu_open(main):
-        menu_keys(["left", "down", "right"])
+    for downs in (FILE_MENU_EXPORT_DOWNS, FILE_MENU_EXPORT_DOWNS + 1, FILE_MENU_EXPORT_DOWNS - 1):
+        _post_click(main, left + FILE_MENU[0], top + FILE_MENU[1])
+        _wait(lambda: open_menus(main), 3, "the FILE menu didn't open")
         time.sleep(0.3)
-    if not _export_menu_open(main):
+        menu_keys(["down"] * downs + ["right"])
+        time.sleep(0.3)
+        if _export_menu_open(main):
+            break
         while open_menus(main):
             menu_keys(["escape"])
             time.sleep(0.25)
+    else:
         raise WindowError("FILE > Export wasn't where it was measured. Check the FILE menu with fl_capture")
     menu_keys(["enter"])  # Wave file is the first row and the submenu opens with it highlighted.
     return _wait(lambda: _dialog(main), 5, "Wave file didn't open the save dialog")
@@ -903,6 +974,9 @@ def export_wav(output, overwrite=False, timeout=300):
     try:
         field = _dialog_child(dialog, "Edit", FILE_NAME_FIELD)
         user32.SendMessageW(field, WM_SETTEXT, 0, str(temporary))
+        # WM_SETTEXT doesn't notify the dialog. On 26.1.7 with Windows 11 build 26300 it then saved as untitled.wav,
+        # and the EN_CHANGE a typed key would send made it take the name.
+        _post(user32.GetParent(field), WM_COMMAND, (EN_CHANGE << 16) | FILE_NAME_FIELD, field)
         time.sleep(0.2)
         _post(_dialog_child(dialog, "Button", DIALOG_OK), BM_CLICK)
         form = _wait(lambda: _render_form(main), 5, "the render dialog didn't open")

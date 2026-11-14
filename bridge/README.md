@@ -24,8 +24,8 @@ It depends on the MCP SDK only. The MIDI message goes straight through `winmm`.
    ```
 
 5. Run Tools > Scripts > ClaudeBridge once from any piano roll. `fl_piano_roll_run` repeats the last script with
-   Ctrl+Alt+Y, which FL only enables after the first run of the session. An agent can do this with `fl_click` on the
-   piano roll's menu arrow, `fl_menu_keys` and `fl_capture`.
+   Ctrl+Alt+Y, which FL only enables after the first run of the session. With nothing queued the script does nothing.
+   An agent can do this with `fl_click` on the piano roll's menu arrow, `fl_menu_keys` and `fl_capture`.
 
 After changing a file in `fl_scripts`, run `install.py` again and reload the script in FL. A running script keeps the
 old code, so a new parameter such as `name` in `fl_channel_set` fails its read back until then.
@@ -46,6 +46,10 @@ when FL has the focus, since someone is using it then.
 - `fl_capture` saves PNGs of the main window and any open menu. Coordinates in a full capture are what `fl_click` and
   `fl_scroll` take.
 - `fl_click` also works inside a plugin's panel. A click on the Playlist grid paints a clip, so don't use it there.
+- `fl_capture` also saves FL's other windows, such as a plugin's menu or a dialog, as `popup-N` with their screen
+  position, and `fl_click` sends a point inside one of them to it. Menus drawn with JUCE, as in EZdrummer 3 and EZbass,
+  close as soon as FL leaves the front, so set `focus` both to open one and to click its row. That brings FL to the
+  front and takes the keyboard from the program in use.
 - `fl_menu_keys` chooses from an open menu. Read the highlighted row with `fl_capture` before sending `enter`. A menu
   opened by `fl_click` stays invisible until it is chosen or escaped.
 - `fl_reveal` closes FL's menus and shows its windows again, for when a tool stopped halfway and left FL invisible.

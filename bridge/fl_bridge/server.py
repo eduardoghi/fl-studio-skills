@@ -292,22 +292,26 @@ def fl_piano_roll_run(channel: int, request: str) -> dict:
 
 @server.tool()
 def fl_capture(folder: str | None = None, region: list[int] | None = None) -> list:
-    """Save PNGs of FL's main window and any open menu, without touching the screen, and return their paths.
+    """Save PNGs of FL's main window, any open menu and FL's other windows, without touching the screen.
 
     Works behind other windows, not while minimized. region is [x, y, width, height] in the main window, for reading
-    small controls. Pixels in the main capture are the coordinates fl_click takes, unless a region was cut.
+    small controls. Pixels in the main capture are the coordinates fl_click takes, unless a region was cut. Plugin
+    menus and dialogs come as popup-N with their screen position, which a dialog blocking FL also shows.
     """
     return window.capture(folder, tuple(region) if region else None)
 
 
 @server.tool()
-def fl_click(x: int, y: int, button: str = "left") -> dict:
+def fl_click(x: int, y: int, button: str = "left", focus: bool = False) -> dict:
     """Click a point of the main window without moving the mouse. button is left or right.
 
-    x and y come from an fl_capture of the whole window. A click on the Playlist grid paints a clip, and a click on a
-    menu item only closes the menu, so use fl_menu_keys there.
+    x and y come from an fl_capture of the whole window. A click on the Playlist grid paints a clip, and a click on an
+    FL menu item only closes the menu, so use fl_menu_keys there. A point inside a popup from fl_capture goes to it,
+    which is how a row of a plugin's menu is chosen. focus brings FL to the front first and takes the keyboard from
+    the program in use. Menus drawn with JUCE, as in EZdrummer 3 and EZbass, close as soon as FL leaves the front, so
+    pass focus both to open one and to click its row.
     """
-    return window.click(x, y, button)
+    return window.click(x, y, button, focus)
 
 
 @server.tool()

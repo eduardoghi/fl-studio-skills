@@ -90,7 +90,8 @@ For dozens or hundreds of notes, `bin/fl-notes` in this repository talks to the 
 passing every note through `fl_queue_notes`. `fl-notes read` saves channels of a pattern to a JSON file, and
 `fl-notes write` writes such a file back. It reads every channel before writing any, so a channel holding other notes
 stops the whole write, and it reads each channel back after writing it. Velocity is compared in FL's steps of 1/128,
-since 0.62 reads back as 0.617. The same functions are in `fl_bridge.notes` for scripts that build their notes.
+since 0.62 reads back as 0.617, and times in ticks of the project's PPQ. The Empty template uses 96, where a length of
+3.9 beats reads back as 3.8958. The same functions are in `fl_bridge.notes` for scripts that build their notes.
 
 ## Rendering
 
@@ -113,7 +114,7 @@ hides them as described in "Hiding FL while it works".
 | Choose a menu item | Post arrow keys and enter to the menu's window | Posted clicks close the menu and choose nothing |
 | Press a shortcut | Hold the modifiers in FL's thread, then post the key to a panel | Posting to the main window, or posting Ctrl as a key |
 | Load a plugin | Row menu in the browser, `Open in new channel` | Posted drags start and never drop |
-| Fill a save dialog | `WM_SETTEXT` on the `Edit` with id 1001, `BM_CLICK` on button 1 | The other `Edit`, which belongs to the address bar and is ignored |
+| Fill a save dialog | `WM_SETTEXT` on the `Edit` with id 1001, then `WM_COMMAND` with `EN_CHANGE` to its parent, then `BM_CLICK` on button 1 | The other `Edit`, which belongs to the address bar and is ignored. `WM_SETTEXT` alone, which on Windows 11 build 26300 saved as `untitled.wav` |
 | Export | FILE > Export > Wave file with keys, then Start, with FL hidden | Ctrl+R raised FL above the focused window. Render minimized restores FL at the end, and that took the focus |
 
 Shortcuts need the most care. FL reads Ctrl and Alt from the state of its own thread, so attach to that thread with
@@ -123,8 +124,19 @@ and Ctrl+R both worked sent to the piano roll, and Ctrl+Alt+Y did nothing sent t
 
 - Menus are `TQuickPopupMenuWindow` for FL and `#32768` for a VST such as Omnisphere. Both are top-level windows of
   FL's process, so capture them on their own.
+- EZdrummer 3 and EZbass draw their menus with JUCE, as `JUCE_...` windows with four 12 pixel shadow windows around
+  them. With FL in the background the menu closed before it could be seen, so the kit and bass selectors only worked
+  with FL brought to the front first. Windows only lets the process with the last input change the foreground, and
+  `SetForegroundWindow` failed about half the time until a synthetic Alt press went first. The menu stayed open between
+  calls while FL kept the front, and a posted click on a row chose it. When the person clicked in another program in
+  between, the menu was gone, so the click on the row brings FL to the front again.
+- A posted click on the Velocity and Mapping tabs of EZdrummer's `E-Drums/MIDI In` panel did nothing, even with FL in
+  front, while its buttons and menus answered.
 - Keys skip disabled rows, so counts change with the state of the project. `Run last script again` only enables after
-  a first run, for example. Capture the menu and read the highlighted row before sending enter.
+  a first run, for example. In a project that was never saved, `Delete unused files and save project` is disabled too,
+  and Export moved one row up. Capture the menu and read the highlighted row before sending enter.
+- `right` on a row without a submenu opens the next menu of the menu bar, so keys sent after a wrong count act there.
+  Close the menus and open FILE again rather than correcting from where the highlight landed.
 - Keep the menus open for as little as possible by sending all the keys from one process.
 - Enter and escape can close a menu before the key is released, so don't treat a failed key up as an error.
 - A plugin's row menu has a fixed size in the browser, which tells it from the menu of a folder before choosing.
@@ -157,6 +169,9 @@ landed there and the menu stayed open, so it doesn't capture the mouse.
   other programs.
 - A "Python message" from a piano roll script showed hidden and closed with a posted click on Ok. Once, after a script
   error, three larger message windows appeared with FL in front and FL closed. That wasn't reproduced.
+- A piano roll script's error box, a `TMsgForm` titled `Error`, stayed open outside the main window's capture and made
+  every later bridge call fail with `Operation unsafe at current time`. `WM_CLOSE` closed it. `fl_capture` now saves
+  such windows as `popup-N`.
 
 ## Driving the interface from outside
 
