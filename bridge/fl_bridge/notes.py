@@ -10,7 +10,6 @@ from . import client, window
 
 RUN_TRIES = 4
 RESULT_TIMEOUT_S = 8.0
-TICKS_PER_BEAT = 960  # Only for comparing, so it needs no more than FL's own resolution.
 DEFAULT_VELOCITY = 0.8  # What ClaudeBridge writes when a note has no velocity.
 
 
@@ -23,18 +22,19 @@ def check(notes):
             raise ValueError(f"note {i} has a velocity outside 0 to 1")
 
 
-def _key(note):
-    # FL keeps velocity in steps of 1/128, so a written 0.62 reads back as 0.617.
+def _key(note, ppq):
+    # FL rounds times to the project's PPQ, which is 96 in the Empty template, so a written length of 3.9 beats
+    # reads back as 3.8958. Velocity is kept in steps of 1/128, so a written 0.62 reads back as 0.617.
     return (
         int(note["pitch"]),
-        round(float(note["start"]) * TICKS_PER_BEAT),
-        round(float(note["length"]) * TICKS_PER_BEAT),
+        round(float(note["start"]) * ppq),
+        round(float(note["length"]) * ppq),
         round(float(note.get("velocity", DEFAULT_VELOCITY)) * 128),
     )
 
 
-def same(got, want):
-    return sorted(map(_key, got)) == sorted(map(_key, want))
+def same(got, want, ppq):
+    return sorted(_key(n, ppq) for n in got) == sorted(_key(n, ppq) for n in want)
 
 
 def run(channel, action, payload=None, expect=None, sleep=time.sleep):
@@ -88,9 +88,10 @@ def write(pattern, data, replace=False):
     for notes in data.values():
         check(notes)
     select_pattern(pattern)
+    ppq = client.call("project")["ppq"]
     try:
         current = {c: run(c, "read") for c in data}
-        busy = [c for c, r in current.items() if r["notes"] and not same(r["notes"], data[c])]
+        busy = [c for c, r in current.items() if r["notes"] and not same(r["notes"], data[c], ppq)]
         if busy and not replace:
             raise client.BridgeError(f"channels {busy} hold other notes. Pass replace to clear them")
         report = []
@@ -103,7 +104,7 @@ def write(pattern, data, replace=False):
                 fingerprint = run(c, "clear", expect=fingerprint)["fingerprint"]
             run(c, "add_notes", {"notes": want}, fingerprint)
             back = run(c, "read")["notes"]
-            if not same(back, want):
+            if not same(back, want, ppq):
                 raise client.BridgeError(
                     f"channel {c} read back {len(back)} notes that differ from the {len(want)} written"
                 )

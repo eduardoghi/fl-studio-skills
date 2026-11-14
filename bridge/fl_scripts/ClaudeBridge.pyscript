@@ -66,10 +66,14 @@ ACTIONS = {"add_notes": add_notes, "clear": clear, "read": read}
 
 
 def main():
-    with open(QUEUE_FILE) as f:
-        item = json.load(f)
+    # The run that enables Ctrl+Alt+Y usually finds nothing queued, and the queue file only exists after the first
+    # action. Either way it stays quiet, since a box left open would make the next bridge calls fail too.
+    try:
+        with open(QUEUE_FILE) as f:
+            item = json.load(f)
+    except FileNotFoundError:
+        item = {}
     if not item:
-        flp.Utils.ShowMessage("Claude Bridge: nothing queued.")
         return
     done = {"id": item.get("id"), "ok": True}
     try:
