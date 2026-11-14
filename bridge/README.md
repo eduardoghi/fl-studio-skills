@@ -73,7 +73,9 @@ because FL starts the drag and never drops. These tools only support Windows.
 ## Writing notes safely
 
 The piano roll can't say which channel it shows. Read the channel first, then pass the `fingerprint` of its notes as
-`expect`, and the script refuses to write if it finds other notes. Each write returns the new fingerprint. Empty
+`expect`, and the script refuses to write if it finds other notes. Each write returns the new fingerprint, which
+the next read returns too, since velocity counts in the 1/128 steps FL keeps (checked at 96, 192 and 960 PPQ).
+Changing the PPQ rescales the notes' times and so their fingerprint, so read the channel again after it. Empty
 channels share one fingerprint, as do channels with identical notes, so those can't be told apart.
 
 The queue holds one action. A second one is refused until the first runs or `fl_queue_discard` drops it, and requests

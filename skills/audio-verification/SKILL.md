@@ -1,6 +1,6 @@
 ---
 name: audio-verification
-description: Check exported audio with measurements instead of guessing, since the agent can't listen. Use after rendering a mix or stem from FL Studio, when the user reports noise, clicks, thumps, harshness or low volume, to confirm that chords sound the notes that were written, to prepare level-matched versions for an A/B comparison, or to audit the continuity of the transitions between sections.
+description: Check exported audio with measurements instead of guessing, since the agent can't listen. Use after rendering a mix or stem from FL Studio, when the user reports noise, clicks, thumps, harshness or low volume, to confirm that chords sound the notes that were written, to prepare level-matched versions for an A/B comparison, to audit the continuity of the transitions between sections, or to transcribe a part from a reference recording and check its rebuild against it.
 ---
 
 # Verifying exported audio
@@ -82,6 +82,47 @@ counts its level.
 
 Change one thing per render.
 
+## Transcribing a part from a reference
+
+Notes taken from a recording are measurements with errors, not facts. Keep the raw output of every tool, record
+which evidence supports each note, and keep the reason for every correction next to it, so a later pass can undo
+one decision without redoing the rest. Mark what was detected, what was estimated and what a person confirmed by
+ear. Agreement between tools raises confidence but doesn't confirm a note, since tools can share an error.
+
+The points below come from transcribing one bass line from a separated stem. Treat the numbers as an example of
+what to check, not as thresholds for another recording.
+
+- Pitch trackers answer "what pitch is sounding", not "where does a note start". None of the four tried (pYIN,
+  CREPE, PESTO and Basic Pitch) split repeated notes of the same pitch reliably, and the line had more repeated
+  pairs than pitch changes. Take attacks from the audio (spectral flux, the envelope) and ask the trackers only for
+  the pitch between two attacks. On that bass each new pluck followed a short dip in the low-band envelope, which
+  marked both the attack and the end of the previous note.
+- Check the octave against the harmonic structure, not against one tracker. Energy at half the detected frequency
+  points to a note an octave lower, and a second harmonic stronger than the fundamental can pull a tracker an
+  octave up. Compare trackers and stems from other separation models before accepting a note in an unusual octave.
+- The tempo grid is evidence, not a target. Real attacks clustered tightly around grid positions while weak
+  candidates without a dip spread evenly, and the even ones rarely appeared in the other stems. Use that to judge
+  doubtful events, and keep the measured times of the notes kept. Don't move notes onto the grid and don't move
+  pitches into the estimated key.
+- Tell apart what looks alike in a pitch curve:
+  - a repeated note has a new attack with no pitch change
+  - legato (hammer-on, pull-off) changes pitch abruptly with no new attack
+  - a slide changes pitch with no new attack and passes through the pitches between, which a fretted instrument
+    shows as a staircase of semitones rather than a smooth glide
+  - a rest is a fall in level, while a short event glued to the end of a note and followed by silence is usually the
+    note being muted, sometimes together with a drum hit leaking into the stem
+  - an event with no pitch and much brighter than the notes is usually leakage from another part
+- When the instrument used for the rebuild has articulations (keyswitches for slides, legato on overlapping notes),
+  probe what each one actually does in a render before relying on it, and keep notes that should be plucked from
+  overlapping by accident.
+- Compare the render with the reference using the same segmenter on both. It removes the bias of the method
+  but not its blind spots, so read the disagreements one by one. Some will be the segmenter merging or splitting
+  events in one of the two files, not a difference in the music.
+- Sort what remains by cause before changing notes, whether transcription (wrong or missing notes), articulation
+  (how a note starts, ends or moves), sustain (how it decays), timbre or mixing. Only the first two belong in the
+  notes.
+  A long note that decays faster in the render, or a darker tone in the reference, is for the sound or the mix.
+
 ## Velocities from a reference
 
 To copy the dynamics of a recorded part onto a virtual instrument, measure how the instrument answers velocity
@@ -105,17 +146,17 @@ instrument-calibrate compare ref_snare.wav render_snare.wav --times snare_times.
   right, the render matched the reference's relative level per note within 0.3 dB.
 - A target under the instrument's softest velocity can't be played, and velocity 1 left such hits up to 28 dB too
   loud. `velocity` flags them so they can be dropped or given another articulation.
-- For a pitched instrument, calibrate a few notes across the range in use and render a second layout with other
-  notes and velocities for `validate`. On a sampled bass the top of the range sat 2 to 6 dB under the bottom at low
-  velocities, and interpolating in pitch predicted the held-out notes within 0.9 dB (median), as close as the
-  round robin allows (3 to 6 dB between hits of one velocity). `velocity` interpolates a note that has no curve.
-- When the reference's attacks start from a sounding note or from silence alike, the attack window lands at
-  different points of the rise. On a bass that left notes after a rest 25 velocities too soft. The peak of the first
-  100 ms against the peak curve (`--key peak_db`) removed that bias.
-- Measure the instrument's delay with the same onset method used on the reference, in a render of the whole part.
-  The same bass read 0 ms late on isolated hits and 7.7 ms late among other notes, where the method finds the dip
-  before each attack. Notes before a rest also need the instrument's release in mind, since its tail kept sounding
-  40 to 70 ms past the reference's end, so those notes were shortened by that much.
+- A pitched instrument can answer velocity differently across its range. Calibrate a few notes spread over the
+  range in use, render a second layout with other notes and velocities, and run `validate` on it. If interpolating
+  in pitch clearly beats one mean curve, use it (`velocity` interpolates a note without its own curve). The round
+  robin sets how close any model can get. `plugins/ezbass.md` in fl-plugins has one measured case.
+- When some of the reference's attacks start from silence and others from a sounding note, a 30 ms window starts
+  at different points of the rise and biases the level of one group. Check the velocities by context (after a
+  rest, after a note). The peak of the first 100 ms against the peak curve (`--key peak_db`) moves much less.
+- Measure the instrument's delay with the same onset method used on the reference, in a render of the whole part,
+  since a method that keys on what precedes an attack can read isolated hits and connected notes differently. The
+  same goes for the end of notes before a rest, where the instrument's release may keep sounding after the
+  reference has stopped.
 - Compare one part at a time, with that part rendered alone against the same part in the reference. Attacks counted
   in a full mix mislead. A kick part matched its 195 notes exactly, while a band filter over the whole drum mix
   counted 398 low attacks in the reference and 542 in the render. `compare` sorts the attacks into those at a note,
