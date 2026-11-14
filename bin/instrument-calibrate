@@ -7,12 +7,17 @@
       measure each hit of the render and keep mean and spread per note and velocity
   instrument-calibrate velocity curves.json --note 38 --anchor 120 -- -3 -12.5 -30
       velocities whose attack sits that many dB under the anchor's, from the measured curve
+  instrument-calibrate validate curves.json held_out.json
+      how well the curves predict notes or velocities that weren't part of them
   instrument-calibrate compare ref.wav render.wav --times notes.json --offset -1.5
       attacks of one part in a reference and in a render, against the times of the notes written
 
 The attack level is the RMS of the first 30 ms. It tracks velocity more steadily than the peak, and the analysis also
 keeps the peak, the spectral centroid of the first 50 ms and the time for the level to fall 30 dB. A level taken from
 a mixed reference carries gain and processing, so only differences between hits of the same part map to velocity.
+velocity and validate take --key peak_db when the reference's attacks can't be placed precisely, since the 30 ms
+window then starts at different points of the rise and the peak barely moves. A note without its own curve gets
+one interpolated in pitch between its calibrated neighbors.
 Reads WAV files through wav-check, next to this script. Needs numpy.
 """
 
@@ -37,6 +42,7 @@ def _load_wav_check():
 
 wav_check = _load_wav_check()
 DEFAULT_VELOCITIES = (1, 12, 24, 36, 48, 60, 72, 84, 96, 108, 118, 127)
+LEVEL_KEYS = ("attack_db", "peak_db")
 
 
 def mono(path):
@@ -118,10 +124,69 @@ def analyze(doc, y, rate):
     return {"bpm": doc["bpm"], "render_offset_s": round(offset, 5), "curves": curves}
 
 
-def velocity_for(rows, anchor, rel_db):
-    """Return the velocity whose attack sits rel_db under the anchor's on the curve, and a flag at either end."""
+def curve_for(curves, note, key="attack_db"):
+    """Return the rows of a note's curve, interpolated between the nearest calibrated notes when it has none.
+
+    Linear in pitch, at each velocity both neighbors share. A note outside the calibrated range takes the curve of
+    the nearest one. The second value names the notes the rows came from.
+    """
+    if str(note) in curves:
+        return curves[str(note)], [int(note)]
+    have = sorted(int(p) for p in curves)
+    lo = max([p for p in have if p <= int(note)], default=None)
+    hi = min([p for p in have if p >= int(note)], default=None)
+    if lo is None or hi is None:
+        nearest = hi if lo is None else lo
+        return curves[str(nearest)], [nearest]
+    w = (int(note) - lo) / (hi - lo)
+    upper = {r["velocity"]: r for r in curves[str(hi)]}
+    rows = [
+        {"velocity": r["velocity"], key: (1 - w) * r[key] + w * upper[r["velocity"]][key]}
+        for r in curves[str(lo)]
+        if r["velocity"] in upper
+    ]
+    return rows, [lo, hi]
+
+
+def validate(fit, held_out, key="attack_db"):
+    """Predict each held-out note and velocity from the fitted curves with three models and report the errors.
+
+    mean averages every fitted note, nearest takes the closest fitted note and interp interpolates in pitch. Levels
+    between measured velocities are interpolated linearly. If interp clearly beats mean, the instrument answers
+    velocity differently across its range and one curve for every note would be off.
+    """
+    have = sorted(int(p) for p in fit)
+
+    def level(rows, velocity):
+        return float(np.interp(velocity, [r["velocity"] for r in rows], [r[key] for r in rows]))
+
+    predictors = {
+        "mean": lambda p, v: float(np.mean([level(fit[str(q)], v) for q in have])),
+        "nearest": lambda p, v: level(fit[str(min(have, key=lambda q: abs(q - p)))], v),
+        "interp": lambda p, v: level(curve_for(fit, p, key)[0], v),
+    }
+    report = {}
+    for name, predict in predictors.items():
+        errors, per_note = [], {}
+        for pitch, rows in held_out.items():
+            for r in rows:
+                e = r[key] - predict(int(pitch), r["velocity"])
+                errors.append(e)
+                per_note.setdefault(pitch, []).append(e)
+        errors = np.array(errors)
+        report[name] = {
+            "mean_db": round(float(errors.mean()), 2),
+            "abs_median_db": round(float(np.median(np.abs(errors))), 2),
+            "abs_max_db": round(float(np.abs(errors).max()), 2),
+            "per_note_mean_db": {p: round(float(np.mean(v)), 2) for p, v in per_note.items()},
+        }
+    return report
+
+
+def velocity_for(rows, anchor, rel_db, key="attack_db"):
+    """Return the velocity whose level sits rel_db under the anchor's on the curve, and a flag at either end."""
     vels = np.array([r["velocity"] for r in rows], float)
-    levels = np.array([r["attack_db"] for r in rows], float)
+    levels = np.array([r[key] for r in rows], float)
     target = float(np.interp(anchor, vels, levels)) + rel_db
     order = np.argsort(levels)
     velocity = int(np.clip(round(float(np.interp(target, levels[order], vels[order]))), 1, 127))
@@ -205,9 +270,15 @@ def main():
     p.add_argument("out")
     p = sub.add_parser("velocity")
     p.add_argument("curves")
-    p.add_argument("--note", required=True)
+    p.add_argument("--note", required=True, help="a note without its own curve is interpolated between neighbors")
     p.add_argument("--anchor", type=float, default=120)
+    p.add_argument("--key", choices=LEVEL_KEYS, default="attack_db")
     p.add_argument("rel_db", nargs="+", type=float)
+    p = sub.add_parser("validate")
+    p.add_argument("fit", help="curves.json the predictions come from")
+    p.add_argument("held_out", help="curves.json of notes or velocities left out of the fit")
+    p.add_argument("--key", choices=LEVEL_KEYS, default="attack_db")
+    p.add_argument("--out")
     p = sub.add_parser("compare")
     p.add_argument("reference")
     p.add_argument("render")
@@ -239,11 +310,25 @@ def main():
             spread = max(r["attack_db_spread"] for r in rows)
             print(f"note {pitch}: attack dB per velocity {line} (largest spread {spread:.1f} dB)")
     elif args.cmd == "velocity":
-        rows = json.loads(Path(args.curves).read_text(encoding="utf-8"))["curves"][args.note]
+        curves = json.loads(Path(args.curves).read_text(encoding="utf-8"))["curves"]
+        rows, source = curve_for(curves, args.note, args.key)
+        if source != [int(args.note)]:
+            print(f"note {args.note} has no curve, using " + " and ".join(map(str, source)))
         for rel in args.rel_db:
-            velocity, beyond, flag = velocity_for(rows, args.anchor, rel)
+            velocity, beyond, flag = velocity_for(rows, args.anchor, rel, args.key)
             note = f" ({flag} by {abs(beyond):.1f} dB)" if flag else ""
             print(f"{rel:+.1f} dB -> velocity {velocity}{note}")
+    elif args.cmd == "validate":
+        read = lambda path: json.loads(Path(path).read_text(encoding="utf-8"))["curves"]
+        report = validate(read(args.fit), read(args.held_out), args.key)
+        if args.out:
+            Path(args.out).write_text(json.dumps(report, indent=1), encoding="utf-8")
+        for name, r in report.items():
+            notes = " ".join(f"{p}:{e:+.1f}" for p, e in r["per_note_mean_db"].items())
+            print(
+                f"{name:8s} median {r['abs_median_db']:.2f} dB off, worst {r['abs_max_db']:.2f}, "
+                f"mean {r['mean_db']:+.2f}; per note {notes}"
+            )
     else:
         ref, rate = mono(args.reference)
         ren, rate2 = mono(args.render)

@@ -92,6 +92,7 @@ instrument-calibrate layout cal.json --bpm 104.5 --notes 36,38,42 --long 46,49,5
 fl-notes write cal.json 4          # the file holds "notes" for one channel; wrap them as {"3": [...]} first
 instrument-calibrate analyze cal.json render.wav curves.json
 instrument-calibrate velocity curves.json --note 38 --anchor 120 -- -2 -9.5 -24
+instrument-calibrate validate curves.json held_out.json   # curves of notes or velocities left out of the first
 instrument-calibrate compare ref_snare.wav render_snare.wav --times snare_times.json --offset -1.677
 ```
 
@@ -104,6 +105,17 @@ instrument-calibrate compare ref_snare.wav render_snare.wav --times snare_times.
   right, the render matched the reference's relative level per note within 0.3 dB.
 - A target under the instrument's softest velocity can't be played, and velocity 1 left such hits up to 28 dB too
   loud. `velocity` flags them so they can be dropped or given another articulation.
+- For a pitched instrument, calibrate a few notes across the range in use and render a second layout with other
+  notes and velocities for `validate`. On a sampled bass the top of the range sat 2 to 6 dB under the bottom at low
+  velocities, and interpolating in pitch predicted the held-out notes within 0.9 dB (median), as close as the
+  round robin allows (3 to 6 dB between hits of one velocity). `velocity` interpolates a note that has no curve.
+- When the reference's attacks start from a sounding note or from silence alike, the attack window lands at
+  different points of the rise. On a bass that left notes after a rest 25 velocities too soft. The peak of the first
+  100 ms against the peak curve (`--key peak_db`) removed that bias.
+- Measure the instrument's delay with the same onset method used on the reference, in a render of the whole part.
+  The same bass read 0 ms late on isolated hits and 7.7 ms late among other notes, where the method finds the dip
+  before each attack. Notes before a rest also need the instrument's release in mind, since its tail kept sounding
+  40 to 70 ms past the reference's end, so those notes were shortened by that much.
 - Compare one part at a time, with that part rendered alone against the same part in the reference. Attacks counted
   in a full mix mislead. A kick part matched its 195 notes exactly, while a band filter over the whole drum mix
   counted 398 low attacks in the reference and 542 in the render. `compare` sorts the attacks into those at a note,

@@ -104,6 +104,44 @@ class InstrumentCalibrate(unittest.TestCase):
         self.assertLess(abs(level_db(velocity) - wanted), 1.0)
         self.assertIn("below_floor", lines[1])
 
+    def pitched_curves(self, name, pitches, velocities):
+        """Curves of an instrument that gets 0.5 dB quieter per semitone, written in the analyze format."""
+        doc = {
+            "curves": {
+                str(p): [
+                    {
+                        "velocity": v,
+                        "attack_db": level_db(v) - 0.5 * (p - 40),
+                        "peak_db": level_db(v) + 8 - 0.5 * (p - 40),
+                    }
+                    for v in velocities
+                ]
+                for p in pitches
+            }
+        }
+        path = self.dir / name
+        path.write_text(json.dumps(doc))
+        return path
+
+    def test_velocity_interpolates_a_note_without_its_own_curve(self):
+        curves = self.pitched_curves("curves.json", (40, 52), (1, 32, 64, 96, 127))
+        out = self.run_tool("velocity", curves, "--note", 46, "--anchor", 127, "--key", "peak_db", "--", -6)
+        self.assertIn("using 40 and 52", out)
+        velocity = int(out.strip().splitlines()[-1].split("velocity ")[1].split()[0])
+        # Note 46 sits halfway, so its curve is 3 dB under note 40's at every velocity and the offset cancels.
+        self.assertLess(abs(level_db(velocity) - (level_db(127) - 6)), 1.0)
+
+    def test_validate_prefers_interpolation_when_level_depends_on_pitch(self):
+        fit = self.pitched_curves("fit.json", (40, 52), (1, 12, 24, 36, 48, 60, 72, 84, 96, 108, 118, 127))
+        held = self.pitched_curves("held.json", (44, 49), (20, 70, 110))
+        out_json = self.dir / "report.json"
+        out = self.run_tool("validate", fit, held, "--out", out_json)
+        report = json.loads(out_json.read_text())
+        # Velocities between the measured ones are interpolated linearly on a curved answer, hence the small error.
+        self.assertLess(report["interp"]["abs_max_db"], 1.0)
+        self.assertGreater(report["mean"]["abs_max_db"], report["interp"]["abs_max_db"] + 1.0)
+        self.assertIn("interp", out)
+
     def test_compare_tells_secondary_attacks_from_unrelated_ones(self):
         times = [1.0, 2.0, 3.0]
         ref = place(4.5, [(t, burst(-12, seed=i)) for i, t in enumerate(times)])
