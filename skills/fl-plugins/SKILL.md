@@ -18,7 +18,7 @@ Read only the file of the plugin in use:
 | Omnisphere 3 | `plugins/omnisphere.md` | Patches change the octave, and choosing one needs the interface |
 | ValhallaVintageVerb | `plugins/valhalla-vintageverb.md` | Starts at 100% mix |
 | EZdrummer 3 | `plugins/ezdrummer-3.md` | Note map measured, and its menus need FL in front |
-| EZbass | `plugins/ezbass.md` | FL can load an old VST2 build instead of the VST3 |
+| EZbass | `plugins/ezbass.md` | sounds an octave under the note written, keyswitch map, slides at a fixed speed, overlaps play legato, FL can load an old VST2 build |
 | Evolution (Orange Tree) | `plugins/evolution.md` | Overlapping notes a tone apart become legato, even on different strings |
 | Kontakt 8 | `plugins/kontakt.md` | Libraries are in Classic View, and `DEMO` marks an unregistered library |
 
