@@ -18,6 +18,28 @@ string each, needs that kind of voicing or a smaller range.
 - Manual. The engine keeps legato apart per MIDI channel, and a channel-based string mode picks the string from the
   channel. The bridge writes no MIDI channel per note, so neither is available from the piano roll script.
 - Two notes on the same string need a small gap to be heard as two picks. A gap of 2 ticks at 96 PPQ was enough.
+- Observed in renders, by the pick transient above 3 kHz at the second note. A note starting 2 semitones above one
+  still held rose about 1 dB (no pick, a hammer-on), the same pair without overlap rose 26 dB, and a pair 5 semitones
+  apart rose 28 dB even when overlapping. Two semitones down while overlapping rose 17 dB, a partial pull-off.
+
+## Velocity
+
+Observed on Indie Rock with no snapshot loaded, notes 54, 61, 66 and 73, three hits per velocity:
+
+- Velocity 1 is nearly silent (about -77 dB attack RMS against -26 to -31 dB at 127), and from 12 to 127 the attack
+  rises about 25 dB, monotonic and not straight. Hits of one velocity differ by under 3 dB, mostly under 1.1 dB.
+- The curves differ by a few dB across the neck. Interpolating them in pitch predicted other notes and velocities
+  within 1.3 dB (median), worst 3 dB.
+- The level of a note's own semitone does not rise steadily. On notes 61 and 66 it fell 4 to 7 dB from velocity 96 up,
+  likely a sample layer with a different harmonic balance, so it can't stand in for velocity in a chord.
+
+## Tone
+
+- The TONE page shows Distortion, Tremolo and Volume stompboxes, with a scroll bar for more below, which the bridge
+  can't scroll (see Controlling it).
+- Against one clean, reverberant rock guitar stem, Indie Rock's band profile matched within about 1 dB from 150 Hz
+  to 4 kHz with no snapshot, while Evolution Strawberry sat 6 dB higher from 1 to 2 kHz and 5 dB lower from 150 to
+  300 Hz. Comparing libraries this way, on the same notes, picks one before any mixing.
 
 ## Initial state
 

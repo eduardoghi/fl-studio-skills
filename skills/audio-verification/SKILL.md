@@ -123,6 +123,39 @@ what to check, not as thresholds for another recording.
   notes.
   A long note that decays faster in the render, or a darker tone in the reference, is for the sound or the mix.
 
+### Polyphonic parts
+
+These come from one guitar part with heavy stereo processing, again as examples of what to check.
+
+- Validate every detector, including your own measurements, on a render of MIDI you know before trusting it on the
+  reference. Render it dry and again with effects close to the reference's. On a clean render the best guitar model
+  scored F 0.94, and with stereo modulation and reverb the same model fell to 0.29, firing short false notes at the
+  modulation, while another model held 0.70. Pick tools and thresholds by that test, not by how much tools agree.
+- A pitch-presence measure built from a constant-Q transform must center each semitone's bins on the semitone. With
+  three bins per semitone grouped as 0, +33 and +67 cents, every played note also read as present a semitone
+  below, which looked like wrong notes in both the render and the reference. Centered bins (-33, 0, +33) removed
+  all of them. What a presence threshold still lets through is mostly harmonics 2 to 4 (+12, +19, +24 semitones).
+- Treat a pitch 12, 19 or 24 semitones above another detected pitch, with weaker evidence and lower level, as a
+  harmonic rather than a note.
+- Count tools as independent only across model families. The same model on stems from two separators, or two
+  checkpoints of one model, make the same mistakes. Requiring two families beat both single tools and a stricter
+  three-family rule, which kept precision high but lost half the notes.
+- A tail is not a note. Ending a note when it is no longer present at all keeps the reverb in it. Ending it when it
+  falls a fixed amount below its own peak got the median duration right on the known render.
+- Check that the notes can be played. On a guitar a new note on a string ends the one ringing on it, and the
+  fretting hand spans a few frets. Assigning strings and frets at each attack removed every moment with more than
+  six notes without capping the count, and the few attacks left without a fingering were mostly a harmonic or a
+  leak from another part (a bass note an octave up in the guitar stem).
+- Separate effects from playing before adding notes. A modulation that moves every pitch in phase is tremolo, one
+  with a pick transient at each repeat is playing, and repeats that fall by a constant ratio are delay. A pitch
+  modulating chorus spreads energy into the neighbouring semitones, so its absence in the reference rules out a
+  strong one. Left and right attacks within a millisecond of each other point to one source spread by processing
+  rather than two takes. A clean stop in the part gives the reverb's decay, which an estimate of note durations
+  cannot.
+- A level per note in a chord can't come from broadband RMS. The level of the note's own semitone separates the
+  notes, but check that it rises steadily with velocity on the instrument, since a sample layer with a different
+  harmonic balance can make it fall.
+
 ## Velocities from a reference
 
 To copy the dynamics of a recorded part onto a virtual instrument, measure how the instrument answers velocity
