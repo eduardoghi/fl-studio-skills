@@ -58,9 +58,13 @@ when FL has the focus, since someone is using it then.
 - `fl_load_plugin` opens a browser row in a new channel, and refuses a row that isn't a plugin.
 - `fl_mixer_add_effect` loads a browser effect into the first empty slot of a mixer track. FL's scripting API can't
   load plugins, and the browser's Send to selected channel item puts an effect on the mixer track of the selected
-  channel, so the tool selects a channel feeding the track and refuses a track no channel feeds. It reads the track
-  before and after and fails unless exactly one effect appeared, in the first empty slot, with every other slot as
-  it was. Removing an effect still goes through the plugin window's menu (Delete, then Ok in the Confirm box).
+  channel, or replaces the plugin whose window is open, even with the keyboard on the piano roll. So the tool
+  selects a channel feeding the track (it refuses a track no channel feeds), closes every plugin window first and
+  the new one after, and reads every track before and after. It fails unless exactly one effect appeared, in the
+  first empty slot, with every other slot of every track as it was.
+- `fl_mixer_remove_effect` deletes the effect in a slot. It opens that effect's window with `mixer.focusEditor`,
+  checks the focused window's id, chooses Delete in the window's menu and Ok in the Confirm box, and fails unless
+  only that slot emptied. FL keeps no undo for loading or deleting plugins.
 - `fl_set_ppq` sets the timebase in Options > Project general settings and reads it back. `fl_import_midi` imports a
   MIDI file through FILE > Import > MIDI file into a new empty pattern of the open project, reads and sets each
   option of the import form before Accept, and returns the project's state before and after, with a warning when

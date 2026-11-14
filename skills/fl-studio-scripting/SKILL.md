@@ -75,11 +75,15 @@ the mixer track and slot goes from 0 to 9.
 - `plugins.getPadInfo(channel, -1, 1, pad)` gives the note of an FPC pad, and option 0 gives the pad count.
 - Which of Ample Guitar's amps is active isn't among the parameters that were listed.
 - The API reads and sets plugins but can't load or remove one. In the interface, a browser effect's right-click menu
-  starts with Send to selected channel or focused plugin, which puts the effect in the first empty slot of the
-  mixer track of the channel selected in the Channel Rack (clicking a mixer strip doesn't count). With no channel
-  selected that way it landed on the Master. A plugin window's menu (the arrow left of its caption) has Replace and
-  Delete, and Delete asks for Ok in a Confirm box. The bridge's `fl_mixer_add_effect` follows this path and checks
-  the slots before and after.
+  starts with Send to selected channel or focused plugin. It puts the effect in the first empty slot of the mixer
+  track of the channel selected in the Channel Rack (clicking a mixer strip doesn't count, and with nothing else
+  selected it landed on the Master), unless a plugin window is open. Then it replaced that plugin, twice, even with
+  the keyboard on the piano roll. Plugin windows are `TPluginForm` children of the main window, and `WM_CLOSE` hides
+  one without unloading the plugin.
+- `mixer.focusEditor(track, slot)` opens an effect's window, and `ui.getFocusedFormID()` then gives
+  `((track << 6) + slot) << 16`. The window's menu (the arrow left of its caption) starts with Replace and Delete,
+  and Delete asks for Ok in a Confirm box. FL's own plugins have a taller menu, with Scaling and Help at the bottom.
+  The bridge's `fl_mixer_add_effect` and `fl_mixer_remove_effect` follow these paths and check every track.
 
 ## Piano roll
 

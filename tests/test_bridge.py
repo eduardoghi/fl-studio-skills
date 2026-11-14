@@ -861,41 +861,108 @@ class Server(unittest.TestCase):
         with self.assertRaisesRegex(client.BridgeError, "slot 0"):
             self.server.effect_added([], [{"slot": 3, "plugin": "Limiter"}])
 
-    def fake_mixer(self, channels, effects):
-        def call(name, params=None, **kwargs):
-            return {"channel_list": channels, "mixer_get": {"effects": effects}, "channel_select": {}}[name]
-
-        return call
-
-    def test_add_effect_needs_a_channel_feeding_the_track(self):
-        call = self.fake_mixer([{"channel": 0, "track": 1}], [])
-        with mock.patch.object(client, "call", side_effect=call), self.assertRaisesRegex(ValueError, "no channel"):
-            self.server.fl_mixer_add_effect(10, 10, 5)
-
-    def test_add_effect_refuses_a_full_track(self):
-        full = [{"slot": s, "plugin": "X"} for s in range(10)]
-        call = self.fake_mixer([{"channel": 2, "track": 5}], full)
-        with mock.patch.object(client, "call", side_effect=call), self.assertRaisesRegex(ValueError, "no empty"):
-            self.server.fl_mixer_add_effect(10, 10, 5)
-
-    def test_add_effect_selects_the_feeding_channel_and_checks_the_slot(self):
-        calls = []
+    def add_effect(self, mixer, load, caption="Piano roll - Guitar", channels=None):
+        """Run fl_mixer_add_effect against a fake FL whose mixer_list returns the rows in mixer."""
 
         def call(name, params=None, **kwargs):
-            calls.append((name, params))
-            return {"channel_list": [{"channel": 2, "track": 5}], "mixer_get": {"effects": []}, "channel_select": {}}[
-                name
-            ]
+            rows = [{"track": t, "effects": e} for t, e in mixer.items()]
+            return {"channel_list": channels or [{"channel": 2, "track": 5}], "mixer_list": rows}[name]
 
-        after = [{"slot": 0, "plugin": "Limiter"}]
+        focus = {"selected": 2, "piano_roll_focused": True, "caption": caption}
+        with (
+            mock.patch.object(client, "call", side_effect=call),
+            mock.patch.object(client, "focus_piano_roll", return_value=focus) as focused,
+            mock.patch.object(client, "SETTLE_S", 0),
+            mock.patch.object(self.server.window, "load_effect", side_effect=load),
+            mock.patch.object(self.server.window, "close_plugin_forms", return_value=0),
+        ):
+            return self.server.fl_mixer_add_effect(10, 10, 5), focused
+
+    def remove_effect(self, before, after, focused_id):
+        snapshots = iter([before, after])
+
+        def call(name, params=None, **kwargs):
+            if name == "mixer_list":
+                return [{"track": t, "effects": e} for t, e in next(snapshots).items()]
+            return {"id": focused_id, "caption": "Reverb (Insert 5)"}
+
+        delete = mock.Mock()
         with (
             mock.patch.object(client, "call", side_effect=call),
             mock.patch.object(client, "SETTLE_S", 0),
-            mock.patch.object(self.server.window, "load_effect", return_value=after),
+            mock.patch.object(self.server.window, "close_plugin_forms", return_value=0),
+            mock.patch.object(self.server.window, "plugin_forms", return_value=["form"]),
+            mock.patch.object(self.server.window, "delete_plugin_form", delete),
         ):
-            result = self.server.fl_mixer_add_effect(10, 10, 5)
-        self.assertIn(("channel_select", {"channel": 2}), calls)
+            return self.server.fl_mixer_remove_effect(5, 1), delete
+
+    def test_remove_effect_deletes_the_checked_window(self):
+        before = {5: [{"slot": 0, "plugin": "Reverb"}, {"slot": 1, "plugin": "Limiter"}]}
+        after = {5: [{"slot": 0, "plugin": "Reverb"}]}
+        result, delete = self.remove_effect(before, after, self.server.effect_form_id(5, 1))
+        delete.assert_called_once_with("form")
+        self.assertEqual(result, {"track": 5, "effects": [{"slot": 0, "plugin": "Reverb"}]})
+
+    def test_remove_effect_refuses_another_window(self):
+        before = {5: [{"slot": 1, "plugin": "Limiter"}]}
+        with self.assertRaisesRegex(client.BridgeError, "Nothing deleted"):
+            self.remove_effect(before, before, self.server.effect_form_id(5, 0))
+
+    def test_remove_effect_reports_an_unexpected_result(self):
+        before = {5: [{"slot": 1, "plugin": "Limiter"}], 3: [{"slot": 0, "plugin": "Delay"}]}
+        with self.assertRaisesRegex(client.BridgeError, "expected only"):
+            self.remove_effect(
+                before,
+                {3: [{"slot": 0, "plugin": "Delay"}], 5: [{"slot": 1, "plugin": "Limiter"}]},
+                self.server.effect_form_id(5, 1),
+            )
+
+    def test_remove_effect_needs_an_effect_in_the_slot(self):
+        with self.assertRaisesRegex(ValueError, "no effect in slot 1"):
+            self.remove_effect({5: [{"slot": 0, "plugin": "Reverb"}]}, {}, 0)
+
+    def test_add_effect_needs_a_channel_feeding_the_track(self):
+        with self.assertRaisesRegex(ValueError, "no channel"):
+            self.add_effect({}, None, channels=[{"channel": 0, "track": 1}])
+
+    def test_add_effect_refuses_a_full_track(self):
+        full = {5: [{"slot": s, "plugin": "X"} for s in range(10)]}
+        with self.assertRaisesRegex(ValueError, "no empty"):
+            self.add_effect(full, None)
+
+    def test_add_effect_focuses_the_feeding_channel_and_checks_the_slot(self):
+        def load(x, y, snapshot):
+            return {5: [{"slot": 0, "plugin": "Limiter"}]}
+
+        result, focused = self.add_effect({}, load)
+        focused.assert_called_once_with(2)
         self.assertEqual(result, {"track": 5, "via_channel": 2, "slot": 0, "plugin": "Limiter"})
+
+    def test_add_effect_reports_an_effect_replaced_on_another_track(self):
+        # FL puts a browser effect into the focused plugin's slot when a plugin window has the focus
+        before = {3: [{"slot": 0, "plugin": "Reverb"}, {"slot": 1, "plugin": "Limiter"}]}
+
+        def load(x, y, snapshot):
+            return {3: [{"slot": 0, "plugin": "Reverb"}, {"slot": 1, "plugin": "Delay"}]}
+
+        with self.assertRaisesRegex(client.BridgeError, r"changed tracks \[3\]"):
+            self.add_effect(before, load)
+
+    def test_add_effect_reports_other_tracks_even_after_a_timeout(self):
+        state = {3: [{"slot": 0, "plugin": "Reverb"}]}
+
+        def load(x, y, snapshot):
+            state[3] = [{"slot": 0, "plugin": "Delay"}]
+            raise self.server.window.WindowError("FL didn't add the effect")
+
+        with self.assertRaisesRegex(client.BridgeError, r"changed tracks \[3\]"):
+            self.add_effect(state, load)
+
+    def test_add_effect_sends_nothing_when_a_plugin_keeps_the_focus(self):
+        load = mock.Mock()
+        with self.assertRaisesRegex(client.BridgeError, "Nothing was sent"):
+            self.add_effect({}, load, caption="Fruity Limiter (Insert 5)")
+        load.assert_not_called()
 
 
 if __name__ == "__main__":

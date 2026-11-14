@@ -325,6 +325,18 @@ def _h_focus_state(params):
     }
 
 
+def _h_focused_form(params):
+    # A mixer effect's form id packs track and slot as ((track << 6) + slot) << 16.
+    return {"id": ui.getFocusedFormID(), "caption": ui.getFocusedFormCaption()}
+
+
+def _h_effect_editor(params):
+    track, slot = int(params["track"]), int(params["slot"])
+    _require_plugin(track, slot)
+    mixer.focusEditor(track, slot)
+    return _h_focused_form(params)
+
+
 def _h_plugin_params(params):
     index, slot = _target(params)
     _require_plugin(index, slot)
@@ -399,6 +411,8 @@ HANDLERS = {
     "piano_roll_hide": _h_piano_roll_hide,
     "piano_roll_show": _h_piano_roll_show,
     "focus_state": _h_focus_state,
+    "focused_form": _h_focused_form,
+    "effect_editor": _h_effect_editor,
     "mixer_get": lambda params: _track_row(int(params["track"])),
     "channel_get": lambda params: _channel_row(int(params["channel"])),
     "plugin_params": _h_plugin_params,

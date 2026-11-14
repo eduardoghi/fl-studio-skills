@@ -375,8 +375,14 @@ def effect_added(before, after):
     return {"slot": first_free, "plugin": new[first_free]}
 
 
-def _track_effects(track):
-    return client.call("mixer_get", {"track": track})["effects"]
+def _mixer_effects():
+    """Effects of every mixer track that has any, keyed by track."""
+    return {row["track"]: row["effects"] for row in client.call("mixer_list") if row["effects"]}
+
+
+def other_tracks_changed(before, after, track):
+    """Tracks other than track whose effects differ between two _mixer_effects snapshots."""
+    return sorted(t for t in set(before) | set(after) if t != track and before.get(t, []) != after.get(t, []))
 
 
 @server.tool()
@@ -384,20 +390,76 @@ def fl_mixer_add_effect(x: int, y: int, track: int) -> dict:
     """Load the effect at a row of the browser into the first empty slot of a mixer track, and return the slot.
 
     x and y come from fl_capture, as for fl_load_plugin. FL sends a browser effect to the track of the selected
-    channel, so a channel feeding the track must exist (point one at it with fl_channel_set) and it gets selected.
-    The track is read before and after. The call fails if the track is full, if the row isn't an effect, or if
-    anything but one new effect in the first empty slot appeared, which catches an effect replaced by mistake.
+    channel, or into the slot of a plugin whose window is open, replacing it, even with the keyboard on the piano
+    roll. So a channel feeding the track must exist (point one at it with fl_channel_set), every plugin window is
+    closed first (the plugins stay loaded), and the new effect's window is closed after. Every track is read before
+    and after. The call fails if the track is full, if the row isn't an effect, if another track changed, or if
+    anything but one new effect in the first empty slot appeared. FL keeps no undo for this, so a failure names what
+    changed, and fl_mixer_remove_effect can take a wrong effect out.
     """
     feeding = [c for c in client.call("channel_list") if c["track"] == track]
     if not feeding:
         raise ValueError(f"no channel feeds mixer track {track}. Point one at it with fl_channel_set first")
-    before = _track_effects(track)
-    if len(before) >= EFFECT_SLOTS:
+    before = _mixer_effects()
+    if len(before.get(track, [])) >= EFFECT_SLOTS:
         raise ValueError(f"mixer track {track} has no empty slot")
-    client.call("channel_select", {"channel": feeding[0]["channel"]})
+    state = client.focus_piano_roll(feeding[0]["channel"])
+    window.close_plugin_forms()
+    if not state["caption"].startswith("Piano roll"):
+        raise client.BridgeError(f"the focus stayed on {state['caption']!r}, which could be replaced. Nothing was sent")
+    try:
+        after = window.load_effect(x, y, _mixer_effects)
+    except window.WindowError:
+        after = _mixer_effects()
+        changed = other_tracks_changed(before, after, track)
+        if changed:
+            raise client.BridgeError(f"FL changed tracks {changed} instead: {after}") from None
+        raise
     time.sleep(client.SETTLE_S)
-    after = window.load_effect(x, y, lambda: _track_effects(track))
-    return {"track": track, "via_channel": feeding[0]["channel"], **effect_added(before, after)}
+    window.close_plugin_forms()
+    changed = other_tracks_changed(before, after, track)
+    if changed:
+        raise client.BridgeError(f"FL changed tracks {changed} instead of {track}: {after}")
+    return {
+        "track": track,
+        "via_channel": feeding[0]["channel"],
+        **effect_added(before.get(track, []), after.get(track, [])),
+    }
+
+
+def effect_form_id(track, slot):
+    """The id ui.getFocusedFormID gives a mixer effect's window."""
+    return ((track << 6) + slot) << 16
+
+
+@server.tool()
+def fl_mixer_remove_effect(track: int, slot: int) -> dict:
+    """Delete the effect in a slot of a mixer track and return the track's effects after.
+
+    The API can't remove a plugin, so this opens the effect's window (mixer.focusEditor), checks that the focused
+    window is that effect, and chooses Delete in the window's menu and Ok in the Confirm box. Every other plugin
+    window is closed first. Every track is read before and after, and the call fails unless only that slot emptied.
+    """
+    before = _mixer_effects()
+    if slot not in {e["slot"] for e in before.get(track, [])}:
+        raise ValueError(f"mixer track {track} has no effect in slot {slot}")
+    window.close_plugin_forms()
+    focused = client.call("effect_editor", {"track": track, "slot": slot})
+    if focused["id"] != effect_form_id(track, slot):
+        window.close_plugin_forms()
+        raise client.BridgeError(f"the window that opened is {focused}, not track {track} slot {slot}. Nothing deleted")
+    forms = window.plugin_forms()
+    if len(forms) != 1:
+        window.close_plugin_forms()
+        raise client.BridgeError(f"expected one plugin window open, found {len(forms)}. Nothing deleted")
+    window.delete_plugin_form(forms[0])
+    time.sleep(client.SETTLE_S)
+    after = _mixer_effects()
+    want = {t: [e for e in effects if not (t == track and e["slot"] == slot)] for t, effects in before.items()}
+    want = {t: e for t, e in want.items() if e}
+    if after != want:
+        raise client.BridgeError(f"expected only track {track} slot {slot} gone, got {after}")
+    return {"track": track, "effects": after.get(track, [])}
 
 
 @server.tool()

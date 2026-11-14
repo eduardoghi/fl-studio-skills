@@ -70,6 +70,12 @@ CLASS_RENDER = "TWAVRenderForm"
 CLASS_FLIP_TOOL = "TPRFlipForm"
 PLUGIN_MENU_SIZE = (247, 271)  # The browser's menu for a plugin. Folders and other rows open different ones.
 EFFECT_MENU_SIZE = (247, 233)  # The browser's menu for an effect, which has no Open in new channel row.
+CLASS_PLUGIN_FORM = "TPluginForm"  # A plugin's window, a child of the main window. WM_CLOSE hides it.
+PLUGIN_FORM_MENU = (11, 12)  # The menu arrow left of a plugin window's caption, from its top left corner.
+# That menu, whose first rows are Replace and Delete. FL's own plugins add Scaling and Help at the bottom.
+PLUGIN_FORM_MENU_SIZES = ((232, 481), (232, 526))
+CONFIRM_SIZE = (355, 207)  # The Confirm box Delete opens.
+CONFIRM_OK = (240, 180)
 FILE_MENU = (38, 25)  # FILE in the menu bar of the main window.
 FILE_MENU_EXPORT_DOWNS = 11  # Down presses from the top of FILE to Export, with the disabled row skipped.
 EXPORT_MENU_SIZE = (179, 358)  # The Export submenu. Import, one row above, opens a submenu of another size.
@@ -949,18 +955,64 @@ def load_plugin(x, y, channel_count, timeout=30):
     return before
 
 
+def plugin_forms(main=None):
+    """Return the plugin windows that are open."""
+    user32, _, _ = _api()
+    main = main or main_window()
+    return [w for w in _children(main) if _class(w) == CLASS_PLUGIN_FORM and user32.IsWindowVisible(w)]
+
+
+def close_plugin_forms(main=None, timeout=5):
+    """Close every open plugin window, which hides it and leaves the plugin loaded, and return how many there were.
+
+    FL sends a browser effect into the slot of a plugin whose window is open and focused instead of to the selected
+    channel's track, so nothing is sent while one is open.
+    """
+    user32, _, _ = _api()
+    main = main or main_window()
+    forms = plugin_forms(main)
+    for form in forms:
+        user32.PostMessageW(form, WM_CLOSE, 0, 0)
+    _wait(lambda: not plugin_forms(main), timeout, "a plugin window stayed open")
+    return len(forms)
+
+
 @_shielded()
-def load_effect(x, y, effects, timeout=30):
+def delete_plugin_form(form, timeout=10):
+    """Delete the plugin of an open plugin window through its menu (Delete, then Ok in the Confirm box)."""
+    main = main_window()
+    _require_visible(main)
+    _wait(lambda: not open_menus(main), 3, "a menu is already open. Close it with fl_menu_keys(['escape'])")
+    left, top, _, _ = _rect(form)
+    _post_click(main, left + PLUGIN_FORM_MENU[0], top + PLUGIN_FORM_MENU[1])
+    menus = _wait(lambda: open_menus(main), 3, "the plugin window's menu didn't open")
+    size = _rect(menus[0])[2:]
+    if size not in PLUGIN_FORM_MENU_SIZES:
+        menu_keys(["escape"])
+        raise WindowError(f"the menu is {size}, not a plugin window's {PLUGIN_FORM_MENU_SIZES}")
+    menu_keys(["down", "down", "enter"])  # Replace, then Delete
+    box = _wait(
+        lambda: next((p for p in popups(main) if _rect(p)[2:] == CONFIRM_SIZE), None),
+        timeout,
+        "the Confirm box didn't open",
+    )
+    bl, bt, _, _ = _rect(box)
+    _post_click(box, bl + CONFIRM_OK[0], bt + CONFIRM_OK[1])
+    _wait(lambda: not any(_rect(p)[2:] == CONFIRM_SIZE for p in popups(main)), timeout, "the Confirm box stayed open")
+
+
+@_shielded()
+def load_effect(x, y, snapshot, timeout=30):
     """Send the effect at a browser row to the mixer track of the selected channel, through the row's menu.
 
-    effects returns the track's effect list. The menu of an effect has a known size, so another kind of row is
-    refused before anything is chosen. FL puts the effect in the track's first empty slot. Returns the list read
-    once it changed.
+    snapshot returns the effects of every mixer track. The menu of an effect has a known size, so another kind of
+    row is refused before anything is chosen. Returns the snapshot once anything in it changed, wherever FL put the
+    effect, so the caller can check it. Raises WindowError if nothing changed in timeout.
     """
     main = main_window()
     _require_visible(main)
     _wait(lambda: not open_menus(main), 3, "a menu is already open. Close it with fl_menu_keys(['escape'])")
-    before = effects()
+    before = snapshot()
     left, top, _, _ = _rect(main)
     _post_click(main, left + x, top + y, "right")
     menus = _wait(lambda: open_menus(main), 3, "no menu opened at that point")
@@ -971,7 +1023,7 @@ def load_effect(x, y, effects, timeout=30):
     menu_keys(["down", "enter"])  # The first item is Send to selected channel or focused plugin.
 
     def changed():
-        now = effects()
+        now = snapshot()
         return now if now != before else None
 
     return _wait(changed, timeout, "FL didn't add the effect")
