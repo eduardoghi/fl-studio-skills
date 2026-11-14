@@ -364,6 +364,65 @@ def fl_export(output: str, overwrite: bool = False) -> dict:
     return {"output": output, "bytes": window.export_wav(output, overwrite), "song_mode": song_mode}
 
 
+def _project_state():
+    project = client.call("project")
+    channels = client.call("channel_list", timeout=10)
+    patterns = client.call("pattern_list", {"last": max(project["patterns"], 1) + 1})["patterns"]
+    return {"project": project, "channels": channels, "patterns": patterns}
+
+
+@server.tool()
+def fl_set_ppq(ppq: int) -> dict:
+    """Set the project's timebase (PPQ) in Options > Project general settings, and read it back.
+
+    Use 960 before importing MIDI with fine timing. At FL's default of 96 one tick is about 6 ms at 100 BPM, and an
+    import rounds every note to it. ppq is one of 24, 48, 72, 96, 120, 144, 168, 192, 384, 768 or 960.
+    """
+    before = client.call("project")["ppq"]
+    window.set_ppq(before, ppq)
+    after = client.settled("project", {}, check={"ppq": ppq})["ppq"]
+    return {"before": before, "after": after}
+
+
+@server.tool()
+def fl_import_midi(
+    path: str, allow_existing_channels: bool = False, realign_events: bool = False, import_time_signatures: bool = True
+) -> dict:
+    """Import a MIDI file into the open project, into a new empty pattern, and report what changed.
+
+    Never starts a new project, so the project's PPQ and channels stay. FL's import reuses the channels from
+    channel 0 on, renaming them after the MIDI tracks, so a project that already has more than one channel is
+    refused unless allow_existing_channels is true. Notes go to the current pattern, so an unused pattern after the
+    last one is selected first. FL rounds the MIDI tempo to a whole BPM, so set the tempo afterwards with
+    fl_set_tempo. Returns the project state before and after, the options read on the form, and the new pattern.
+    """
+    before = _project_state()
+    if len(before["channels"]) > 1 and not allow_existing_channels:
+        raise ValueError(
+            f"the project has {len(before['channels'])} channels, and FL's MIDI import would rename and reuse them. "
+            "Import into an empty project, or pass allow_existing_channels"
+        )
+    target = before["project"]["patterns"] + 1
+    client.call("pattern_select", {"index": target})
+    client.settled("project", {}, check={"current_pattern": target})
+    options = window.import_midi(
+        path,
+        {
+            "start_new_project": False,
+            "realign_events": realign_events,
+            "import_time_signatures": import_time_signatures,
+            "one_channel_per_track": True,
+            "set_mixer_tracks": True,
+        },
+    )
+    after = _project_state()
+    if after["project"]["ppq"] != before["project"]["ppq"]:
+        raise client.BridgeError(f"the PPQ changed from {before['project']['ppq']} to {after['project']['ppq']}")
+    untouched = [p for p in before["patterns"] if p["index"] != target]
+    changed = [p for p in untouched if p not in after["patterns"]]
+    return {"pattern": target, "options": options, "before": before, "after": after, "other_patterns_changed": changed}
+
+
 @server.tool()
 def fl_render(project: str, output: str, overwrite: bool = False) -> dict:
     """Render a saved .flp to a WAV with FL closed. FL opens by itself, exports and closes.

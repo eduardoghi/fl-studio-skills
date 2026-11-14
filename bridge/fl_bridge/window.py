@@ -76,6 +76,28 @@ RENDER_FORM_SIZE = (433, 611)
 RENDER_START = (385, 587)  # Measured on the form above.
 RENDER_CLOSE = (419, 14)
 FILE_NAME_FIELD = 1001
+OPEN_FILE_NAME_FIELD = 1148  # The Open dialog keeps the name in an Edit inside a ComboBoxEx32 with this id.
+IMPORT_MENU_SIZE = (86, 23)  # FILE > Import holds one row, MIDI file.
+CLASS_CONFIRM = "TMsgForm"
+CLASS_MIDI_IMPORT = "TMIDIImportForm"
+MIDI_IMPORT_FORM_SIZE = (386, 291)
+MIDI_IMPORT_OPTIONS = {  # Radio buttons measured on the form above, at 26.1.7.
+    "start_new_project": (22, 183),
+    "realign_events": (22, 204),
+    "import_time_signatures": (22, 224),
+    "one_channel_per_track": (176, 183),
+    "set_mixer_tracks": (176, 204),
+    "import_zero_velocity": (176, 224),
+}
+MIDI_IMPORT_ACCEPT = (348, 268)
+CONFIRM_NO = (148, 155)  # "Save changes to ...?" with Yes, No and Cancel, on a 277x182 form.
+CONFIRM_CANCEL = (237, 155)
+CONFIRM_FORM_SIZE = (277, 182)
+OPTIONS_MENU = (212, 25)  # OPTIONS in the menu bar.
+OPTIONS_PROJECT_SETTINGS_DOWNS = 7
+SETTINGS_FORM_SIZE = (668, 900)
+SETTINGS_PPQ = (65, 273)  # The Timebase (PPQ) selector on the Project tab, measured on the form above.
+PPQ_CHOICES = (24, 48, 72, 96, 120, 144, 168, 192, 384, 768, 960)
 DIALOG_OK = 1
 DIALOG_CANCEL = 2
 PW_RENDERFULLCONTENT = 2
@@ -175,6 +197,30 @@ def centered(outer, inner):
 def scaled(point, size, reference=RENDER_FORM_SIZE):
     """Move a point measured from the bottom right of a form, since FL can draw the form at another scale."""
     return size[0] - (reference[0] - point[0]), size[1] - (reference[1] - point[1])
+
+
+def from_top_left(point, size, reference):
+    """Scale a point measured on a form of the reference size to the form's current size."""
+    return round(point[0] * size[0] / reference[0]), round(point[1] * size[1] / reference[1])
+
+
+def radio_is_on(pixels, width, point):
+    """Read one of FL's round option buttons from a BGRA capture. On is orange, off is grey."""
+    x, y = point
+    votes = 0
+    for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
+        i = ((y + dy) * width + (x + dx)) * 4
+        b, r = pixels[i], pixels[i + 2]
+        votes += 1 if r > 150 and r - b > 60 else -1
+    return votes > 0
+
+
+def ppq_keys(current, target):
+    """Return the arrow keys that move FL's PPQ list from the current value to the target."""
+    if current not in PPQ_CHOICES or target not in PPQ_CHOICES:
+        raise WindowError(f"PPQ must be one of {PPQ_CHOICES}")
+    steps = PPQ_CHOICES.index(target) - PPQ_CHOICES.index(current)
+    return ["down" if steps > 0 else "up"] * abs(steps)
 
 
 def crop(pixels, width, height, region):
@@ -997,3 +1043,139 @@ def export_wav(output, overwrite=False, timeout=300):
     finally:
         temporary.unlink(missing_ok=True)
     return output.stat().st_size
+
+
+def _popup_of(main, class_name):
+    found = [p for p in popups(main) if _class(p) == class_name]
+    return found[0] if found else None
+
+
+def _click_form(form, point, reference):
+    left, top, width, height = _rect(form)
+    x, y = from_top_left(point, (width, height), reference)
+    _post_click(form, left + x, top + y)
+
+
+def _read_options(form):
+    _, _, width, height = _rect(form)
+    pixels = _grab(form, width, height)
+    return {
+        name: radio_is_on(pixels, width, from_top_left(point, (width, height), MIDI_IMPORT_FORM_SIZE))
+        for name, point in MIDI_IMPORT_OPTIONS.items()
+    }
+
+
+def _import_menu_open(main):
+    menus = open_menus(main)
+    return len(menus) == 2 and _rect(menus[0])[2:] == IMPORT_MENU_SIZE
+
+
+@_shielded()
+def import_midi(path, options, timeout=60):
+    """Import a MIDI file through FILE > Import > MIDI file, with the import form's options set as given.
+
+    options maps names from MIDI_IMPORT_OPTIONS to True or False, and the ones left out keep FL's state. FL asks to
+    save changes before the Open dialog. With start_new_project off, No only skips saving and nothing is lost, so
+    the answer is No. With it on, No would throw the project away, so the prompt is cancelled and an error raised.
+    FL turns start_new_project back on for every import, so it is always read from the form and set.
+    Returns the options as read on the form just before Accept.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise WindowError(f"{path} doesn't exist")
+    unknown = set(options) - set(MIDI_IMPORT_OPTIONS)
+    if unknown:
+        raise WindowError(f"unknown options {sorted(unknown)}")
+    main = main_window()
+    _wait(
+        lambda: not (open_menus(main) or _dialog(main) or popups(main)),
+        3,
+        "a menu or dialog is already open in FL. Close it first",
+    )
+    left, top, _, _ = _rect(main)
+    # Import sits right above Export, so the same retry over the disabled rows applies.
+    for downs in (FILE_MENU_EXPORT_DOWNS - 1, FILE_MENU_EXPORT_DOWNS, FILE_MENU_EXPORT_DOWNS - 2):
+        _post_click(main, left + FILE_MENU[0], top + FILE_MENU[1])
+        _wait(lambda: open_menus(main), 3, "the FILE menu didn't open")
+        time.sleep(0.3)
+        menu_keys(["down"] * downs + ["right"])
+        time.sleep(0.3)
+        if _import_menu_open(main):
+            break
+        while open_menus(main):
+            menu_keys(["escape"])
+            time.sleep(0.25)
+    else:
+        raise WindowError("FILE > Import wasn't where it was measured. Check the FILE menu with fl_capture")
+    menu_keys(["enter"])
+    start_new = options.get("start_new_project", True)
+    deadline = time.monotonic() + 6
+    while time.monotonic() < deadline and not _dialog(main):
+        confirm = _popup_of(main, CLASS_CONFIRM)
+        if confirm:
+            if start_new:
+                _click_form(confirm, CONFIRM_CANCEL, CONFIRM_FORM_SIZE)
+                raise WindowError("FL asked to save changes and a new project would discard them. Save first")
+            _click_form(confirm, CONFIRM_NO, CONFIRM_FORM_SIZE)
+            time.sleep(0.5)
+        time.sleep(0.1)
+    dialog = _wait(lambda: _dialog(main), 3, "MIDI file didn't open the Open dialog")
+    user32, _, _ = _api()
+    try:
+        field = _dialog_child(dialog, "Edit", OPEN_FILE_NAME_FIELD)
+        user32.SendMessageW(field, WM_SETTEXT, 0, str(path))
+        _post(user32.GetParent(field), WM_COMMAND, (EN_CHANGE << 16) | OPEN_FILE_NAME_FIELD, field)
+        time.sleep(0.2)
+        _post(_dialog_child(dialog, "Button", DIALOG_OK), BM_CLICK)
+        form = _wait(lambda: _popup_of(main, CLASS_MIDI_IMPORT), 5, "the Import MIDI data form didn't open")
+    except WindowError:
+        still_open = _dialog(main)
+        if still_open:
+            _cancel_dialog(still_open)
+        raise
+    time.sleep(0.4)
+    state = _read_options(form)
+    for name, wanted in options.items():
+        if state[name] != wanted:
+            _click_form(form, MIDI_IMPORT_OPTIONS[name], MIDI_IMPORT_FORM_SIZE)
+            time.sleep(0.2)
+    state = _read_options(form)
+    wrong = {k: state[k] for k, v in options.items() if state[k] != v}
+    if wrong:
+        _post(form, WM_CLOSE)
+        raise WindowError(f"the import options didn't take: {wrong}")
+    _click_form(form, MIDI_IMPORT_ACCEPT, MIDI_IMPORT_FORM_SIZE)
+    _wait(lambda: not _popup_of(main, CLASS_MIDI_IMPORT), timeout, "the import didn't finish")
+    return state
+
+
+def _settings_form(main):
+    return next((p for p in popups(main) if _text(p).startswith("Settings")), None)
+
+
+@_shielded()
+def set_ppq(current, target):
+    """Set the project's timebase in Options > Project general settings, from current to target PPQ."""
+    keys = ppq_keys(current, target)
+    if not keys:
+        return
+    main = main_window()
+    _wait(lambda: not (open_menus(main) or popups(main)), 3, "a menu or dialog is already open in FL. Close it first")
+    left, top, _, _ = _rect(main)
+    _post_click(main, left + OPTIONS_MENU[0], top + OPTIONS_MENU[1])
+    _wait(lambda: open_menus(main), 3, "the OPTIONS menu didn't open")
+    time.sleep(0.3)
+    menu_keys(["down"] * OPTIONS_PROJECT_SETTINGS_DOWNS + ["enter"])
+    form = _wait(lambda: _settings_form(main), 5, "Project general settings didn't open")
+    try:
+        time.sleep(0.4)
+        _click_form(form, SETTINGS_PPQ, SETTINGS_FORM_SIZE)
+        _wait(lambda: open_menus(main), 3, "the PPQ list didn't open")
+        time.sleep(0.2)
+        menu_keys(keys + ["enter"])
+        time.sleep(0.3)
+    finally:
+        _post(form, WM_CLOSE)
+        while open_menus(main):
+            menu_keys(["escape"])
+            time.sleep(0.25)

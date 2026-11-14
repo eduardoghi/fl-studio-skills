@@ -462,6 +462,29 @@ class Window(unittest.TestCase):
         self.assertFalse(window.is_fl(r"C:\Windows\explorer.exe"))
         self.assertFalse(window.is_fl(""))
 
+    def capture_with(self, color, width=10, height=10):
+        b, g, r = color
+        return bytes([b, g, r, 255] * width * height), width
+
+    def test_radio_reads_the_orange_of_an_option_that_is_on(self):
+        pixels, width = self.capture_with((137, 172, 243))  # BGR read from an option that was on
+        self.assertTrue(window.radio_is_on(pixels, width, (5, 5)))
+
+    def test_radio_reads_grey_as_off(self):
+        pixels, width = self.capture_with((70, 70, 70))
+        self.assertFalse(window.radio_is_on(pixels, width, (5, 5)))
+
+    def test_ppq_keys_count_rows_of_the_list(self):
+        self.assertEqual(window.ppq_keys(96, 960), ["down"] * 7)
+        self.assertEqual(window.ppq_keys(960, 96), ["up"] * 7)
+        self.assertEqual(window.ppq_keys(96, 96), [])
+        with self.assertRaises(window.WindowError):
+            window.ppq_keys(96, 100)
+
+    def test_from_top_left_scales_with_the_form(self):
+        self.assertEqual(window.from_top_left((22, 183), (386, 291), (386, 291)), (22, 183))
+        self.assertEqual(window.from_top_left((22, 183), (772, 582), (386, 291)), (44, 366))
+
     def test_inside_excludes_the_right_and_bottom_edges(self):
         self.assertTrue(window.inside((10, 20, 100, 50), 10, 20))
         self.assertFalse(window.inside((10, 20, 100, 50), 110, 30))

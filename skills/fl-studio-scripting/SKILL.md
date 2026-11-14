@@ -93,6 +93,33 @@ stops the whole write, and it reads each channel back after writing it. Velocity
 since 0.62 reads back as 0.617, and times in ticks of the project's PPQ. The Empty template uses 96, where a length of
 3.9 beats reads back as 3.8958. The same functions are in `fl_bridge.notes` for scripts that build their notes.
 
+## Importing MIDI
+
+FILE > Import > MIDI file, observed on 26.1.7 with a type 1 file at 960 PPQ holding three named tracks, markers, a
+1/4 pickup bar, a tempo of 104.4859 BPM, velocities from 1 to 127, offsets of a few ticks, CC1, CC11, CC64 and
+pitch bend. `fl_import_midi` wraps it.
+
+- Every note came back with its pitch and velocity, a few velocities one step lower.
+- Timing follows the project's PPQ. At 96 the offsets were rounded away (errors up to 5.4 ms) and so were short
+  gaps between notes. At 960, start and length matched exactly.
+- The tempo was rounded to 104.000. `fl_set_tempo` takes 3 decimals and truncates the rest (104.4859 became
+  104.485).
+- Each track became a channel named after it, with a mixer track, but all notes went into one pattern named after
+  the file, and nothing was placed in the Playlist. The markers did appear on the Playlist's ruler.
+- The pickup survived as an offset, the pickup note at beat 0 and the first downbeat at beat 1. The 1/4 time
+  signature was not shown, so FL's bar numbers sit a beat ahead of the music's.
+- FL asks to save changes before the Open dialog. With `Start new project` on, No discards the project. With it off,
+  No only skips saving. FL turns `Start new project` back on for every import, and a new project starts at 96 PPQ.
+- With `Create one channel per track`, a second import reused and renamed the existing channels from channel 0 on
+  instead of adding new ones. A channel renamed beforehand got the MIDI track's name back. The notes went into the
+  current pattern, and other patterns kept theirs.
+- The Open dialog keeps the file name in an `Edit` with id 1148 inside a `ComboBoxEx32`, not the 1001 of the save
+  dialog, and needs the same `EN_CHANGE`.
+- Where CC and pitch bend end up wasn't checked. The piano roll script reads notes only.
+
+The Playlist can't be written from a script. The `playlist` module of the API has track and performance mode
+functions and nothing that adds, moves or reads clips.
+
 ## Rendering
 
 `FL64.exe /R<output.wav> /Ewav /O<folder> project.flp` opens a separate FL, renders and closes. It took 18 s for

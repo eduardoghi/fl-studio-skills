@@ -54,6 +54,12 @@ when FL has the focus, since someone is using it then.
   opened by `fl_click` stays invisible until it is chosen or escaped.
 - `fl_reveal` closes FL's menus and shows its windows again, for when a tool stopped halfway and left FL invisible.
 - `fl_load_plugin` opens a browser row in a new channel, and refuses a row that isn't a plugin.
+- `fl_set_ppq` sets the timebase in Options > Project general settings and reads it back. `fl_import_midi` imports a
+  MIDI file through FILE > Import > MIDI file into a new empty pattern of the open project, reads and sets each
+  option of the import form before Accept, and returns the project's state before and after. It never starts a new
+  project, and it refuses a project with more than one channel unless told otherwise, because FL's import renames
+  and reuses the channels from channel 0 on. Set 960 PPQ first to keep fine timing, and set the tempo afterwards,
+  since FL rounds the MIDI tempo to a whole BPM.
 - `fl_export` exports the open project, unsaved changes included, and FL stays open. `fl_render` is for when FL is
   closed. It uses what was last saved to disk and works on a copy next to the project, so relative sample paths still
   resolve. Both refuse to replace a WAV unless `overwrite` is set.
