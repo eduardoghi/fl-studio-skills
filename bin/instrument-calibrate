@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""Calibrate how a virtual instrument answers velocity, and turn relative levels into velocities.
+
+  instrument-calibrate layout cal.json --bpm 100 --notes 36,38,42 --long 49,51
+      calibration hits for fl-notes: each note at each velocity, a few times, spaced so tails don't overlap
+  instrument-calibrate analyze cal.json render.wav curves.json
+      measure each hit of the render and keep mean and spread per note and velocity
+  instrument-calibrate velocity curves.json --note 38 --anchor 120 -- -3 -12.5 -30
+      velocities whose attack sits that many dB under the anchor's, from the measured curve
+  instrument-calibrate compare ref.wav render.wav --times notes.json --offset -1.5
+      attacks of one part in a reference and in a render, against the times of the notes written
+
+The attack level is the RMS of the first 30 ms. It tracks velocity more steadily than the peak, and the analysis also
+keeps the peak, the spectral centroid of the first 50 ms and the time for the level to fall 30 dB. A level taken from
+a mixed reference carries gain and processing, so only differences between hits of the same part map to velocity.
+Reads WAV files through wav-check, next to this script. Needs numpy.
+"""
+
+import argparse
+import importlib.util
+import json
+import sys
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
+
+import numpy as np
+
+
+def _load_wav_check():
+    """Load wav-check, which has no .py extension, from next to this script."""
+    path = str(Path(__file__).with_name("wav-check"))
+    loader = SourceFileLoader("wav_check", path)
+    module = importlib.util.module_from_spec(importlib.util.spec_from_loader("wav_check", loader))
+    loader.exec_module(module)
+    return module
+
+
+wav_check = _load_wav_check()
+DEFAULT_VELOCITIES = (1, 12, 24, 36, 48, 60, 72, 84, 96, 108, 118, 127)
+
+
+def mono(path):
+    x, rate = wav_check.read_wav(path)
+    return x.mean(axis=1), rate
+
+
+def envelope(y, rate):
+    k = max(int(0.001 * rate), 1)
+    return np.convolve(np.abs(y), np.ones(k) / k, "same")
+
+
+def attack_start(env, rate, t, before=0.06, after=0.04):
+    """Return where the envelope first passes 10% of its local peak around t, in seconds."""
+    lo, hi = max(int((t - before) * rate), 0), int((t + after) * rate)
+    seg = env[lo:hi]
+    if seg.size == 0 or seg.max() <= 0:
+        return t
+    return (lo + int(np.argmax(seg >= 0.1 * seg.max()))) / rate
+
+
+def hit_features(y, env, rate, start, window):
+    a, z = int(start * rate), int((start + window) * rate)
+    x = y[a:z]
+    att = x[: int(0.03 * rate)]
+    head = x[: int(0.05 * rate)]
+    spec = np.abs(np.fft.rfft(head * np.hanning(len(head)), 8192)) ** 2 if len(head) > 1 else np.zeros(1)
+    freqs = np.fft.rfftfreq(8192, 1 / rate)
+    e = env[a:z]
+    above = np.where(e > (e.max() if e.size else 0) * 10 ** (-30 / 20))[0]
+    return {
+        "attack_db": wav_check.db(wav_check.rms(att)),
+        "peak_db": wav_check.db(np.max(np.abs(x)) if len(x) else 0.0),
+        "centroid_hz": float((spec * freqs[: len(spec)]).sum() / (spec.sum() + 1e-20)),
+        "decay_s": float(above[-1] / rate) if above.size else 0.0,
+    }
+
+
+def layout(notes, long_notes, velocities, repeats, gap, long_gap, bpm):
+    hits, t = [], 0.0
+    for pitch in notes:
+        step = long_gap if pitch in long_notes else gap
+        for velocity in velocities:
+            for rep in range(repeats):
+                hits.append({"pitch": pitch, "velocity": velocity, "rep": rep, "start": t, "window": step})
+                t += step
+    return {
+        "bpm": bpm,
+        "hits": hits,
+        "notes": [
+            {
+                "pitch": h["pitch"],
+                "start": round(h["start"], 6),
+                "length": 0.25,
+                "velocity": round(h["velocity"] / 127, 6),
+            }
+            for h in hits
+        ],
+    }
+
+
+def analyze(doc, y, rate):
+    beat = 60 / doc["bpm"]
+    env = envelope(y, rate)
+    loudest = max(doc["hits"], key=lambda h: (h["velocity"], -h["start"]))
+    offset = attack_start(env, rate, loudest["start"] * beat, before=0.0, after=0.1) - loudest["start"] * beat
+    groups = {}
+    for h in doc["hits"]:
+        f = hit_features(y, env, rate, h["start"] * beat + offset, h["window"] * beat * 0.95)
+        groups.setdefault((h["pitch"], h["velocity"]), []).append(f)
+    curves = {}
+    for (pitch, velocity), feats in sorted(groups.items()):
+        row = {"velocity": velocity}
+        for key in ("attack_db", "peak_db", "centroid_hz", "decay_s"):
+            values = [f[key] for f in feats]
+            row[key] = round(float(np.mean(values)), 3)
+            row[key + "_spread"] = round(float(np.max(values) - np.min(values)), 3)
+        curves.setdefault(str(pitch), []).append(row)
+    return {"bpm": doc["bpm"], "render_offset_s": round(offset, 5), "curves": curves}
+
+
+def velocity_for(rows, anchor, rel_db):
+    """Return the velocity whose attack sits rel_db under the anchor's on the curve, and a flag at either end."""
+    vels = np.array([r["velocity"] for r in rows], float)
+    levels = np.array([r["attack_db"] for r in rows], float)
+    target = float(np.interp(anchor, vels, levels)) + rel_db
+    order = np.argsort(levels)
+    velocity = int(np.clip(round(float(np.interp(target, levels[order], vels[order]))), 1, 127))
+    flag = "below_floor" if target < levels.min() else "above_ceiling" if target > levels.max() else None
+    return (
+        velocity,
+        round(target - (levels.min() if flag == "below_floor" else levels.max() if flag else target), 2),
+        flag,
+    )
+
+
+def onsets(y, rate, hop=128, delta=0.07, wait=0.03):
+    """Spectral flux on a log magnitude, with a local median and a gap between peaks."""
+    n = 1024
+    frames = np.lib.stride_tricks.sliding_window_view(np.pad(y, (n // 2, n // 2)), n)[::hop]
+    mag = np.log1p(100 * np.abs(np.fft.rfft(frames * np.hanning(n), axis=1)))
+    flux = np.concatenate([[0], np.maximum(np.diff(mag, axis=0), 0).sum(axis=1)])
+    flux = flux / (flux.max() + 1e-12)
+    k = max(int(0.1 * rate / hop), 1)
+    local = np.array([np.median(flux[max(0, i - k) : i + k + 1]) for i in range(len(flux))])
+    peaks, last = [], -(10**9)
+    for i in range(1, len(flux) - 1):
+        is_peak = flux[i] >= flux[i - 1] and flux[i] > flux[i + 1] and flux[i] > local[i] + delta
+        if is_peak and (i - last) * hop / rate >= wait:
+            peaks.append(i * hop / rate)
+            last = i
+    return np.array(peaks)
+
+
+def compare(ref, ren, rate, times, offset, after=0.25):
+    shift = round(-offset * rate)
+    ren = ren[shift:] if shift >= 0 else np.concatenate([np.zeros(-shift), ren])
+    n = min(len(ref), len(ren))
+    ref, ren = ref[:n], ren[:n]
+    times = np.sort(np.asarray(times, float))
+
+    def classify(found):
+        out = {"at_note": [], "after_note": [], "unrelated": []}
+        for t in found:
+            d = t - times
+            key = (
+                "at_note"
+                if np.any(np.abs(d) <= 0.03)
+                else "after_note"
+                if np.any((d > 0.03) & (d <= after))
+                else "unrelated"
+            )
+            out[key].append(round(float(t), 4))
+        return out
+
+    def level(y, t):
+        a = max(int(t * rate), 0)
+        return wav_check.db(wav_check.rms(y[a : a + int(0.03 * rate)]))
+
+    ref_levels = np.array([level(ref, t) for t in times])
+    ren_levels = np.array([level(ren, t) for t in times])
+    diff = ren_levels - ref_levels
+    diff -= np.median(diff) if len(diff) else 0
+    return {
+        "render": classify(onsets(ren, rate)),
+        "reference": classify(onsets(ref, rate)),
+        "dynamics_db": [round(float(d), 2) for d in diff],
+    }
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("layout")
+    p.add_argument("out")
+    p.add_argument("--bpm", type=float, required=True)
+    p.add_argument("--notes", required=True, help="comma separated MIDI notes")
+    p.add_argument("--long", default="", help="notes whose tails need the long gap")
+    p.add_argument("--velocities", default=",".join(map(str, DEFAULT_VELOCITIES)))
+    p.add_argument("--repeats", type=int, default=3)
+    p.add_argument("--gap", type=float, default=1.25, help="beats between hits")
+    p.add_argument("--long-gap", type=float, default=3.0)
+    p = sub.add_parser("analyze")
+    p.add_argument("layout")
+    p.add_argument("render")
+    p.add_argument("out")
+    p = sub.add_parser("velocity")
+    p.add_argument("curves")
+    p.add_argument("--note", required=True)
+    p.add_argument("--anchor", type=float, default=120)
+    p.add_argument("rel_db", nargs="+", type=float)
+    p = sub.add_parser("compare")
+    p.add_argument("reference")
+    p.add_argument("render")
+    p.add_argument("--times", required=True, help="JSON list of note times in seconds of the reference")
+    p.add_argument("--offset", type=float, default=0.0, help="time of the render's start, in seconds of the reference")
+    p.add_argument("--out")
+    args = ap.parse_args()
+
+    if args.cmd == "layout":
+        to_list = lambda s: [int(v) for v in s.split(",") if v]
+        doc = layout(
+            to_list(args.notes),
+            set(to_list(args.long)),
+            to_list(args.velocities),
+            args.repeats,
+            args.gap,
+            args.long_gap,
+            args.bpm,
+        )
+        Path(args.out).write_text(json.dumps(doc, indent=1), encoding="utf-8")
+        beats = doc["hits"][-1]["start"] + doc["hits"][-1]["window"]
+        print(f"{len(doc['hits'])} hits, {beats:g} beats ({beats * 60 / args.bpm:.1f} s)")
+    elif args.cmd == "analyze":
+        y, rate = mono(args.render)
+        result = analyze(json.loads(Path(args.layout).read_text(encoding="utf-8")), y, rate)
+        Path(args.out).write_text(json.dumps(result, indent=1), encoding="utf-8")
+        for pitch, rows in result["curves"].items():
+            line = " ".join(f"{r['velocity']}:{r['attack_db']:.0f}" for r in rows)
+            spread = max(r["attack_db_spread"] for r in rows)
+            print(f"note {pitch}: attack dB per velocity {line} (largest spread {spread:.1f} dB)")
+    elif args.cmd == "velocity":
+        rows = json.loads(Path(args.curves).read_text(encoding="utf-8"))["curves"][args.note]
+        for rel in args.rel_db:
+            velocity, beyond, flag = velocity_for(rows, args.anchor, rel)
+            note = f" ({flag} by {abs(beyond):.1f} dB)" if flag else ""
+            print(f"{rel:+.1f} dB -> velocity {velocity}{note}")
+    else:
+        ref, rate = mono(args.reference)
+        ren, rate2 = mono(args.render)
+        if rate != rate2:
+            sys.exit("the two files have different sample rates")
+        times = json.loads(Path(args.times).read_text(encoding="utf-8"))
+        result = compare(ref, ren, rate, times, args.offset)
+        if args.out:
+            Path(args.out).write_text(json.dumps(result, indent=1), encoding="utf-8")
+        for side in ("render", "reference"):
+            r = result[side]
+            print(
+                f"{side}: {len(r['at_note'])} attacks at a note, {len(r['after_note'])} after one, "
+                f"{len(r['unrelated'])} unrelated"
+            )
+        d = np.abs(result["dynamics_db"])
+        if d.size:
+            print(f"dynamics per note: median {np.median(d):.2f} dB off, 90th percentile {np.percentile(d, 90):.2f} dB")
+
+
+if __name__ == "__main__":
+    main()

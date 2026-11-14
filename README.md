@@ -46,6 +46,9 @@ scripts inside FL Studio.
 - `bin/wav-check`: measures WAV files for the `audio-verification` skill. Run it with `--help` for the commands.
 - `bin/fl-notes`: reads and writes the notes of many channels through the bridge, checking each write by reading it
   back. For more notes than are worth passing through the MCP tools.
+- `bin/instrument-calibrate`: renders of isolated hits turn into a curve of attack level per note and velocity, which
+  converts relative levels heard in a reference into velocities, and a part's render can be compared with the same
+  part in a reference against the times of its notes. See `audio-verification`.
 - `bridge/`: `fl-bridge`, an MCP server that controls the project open in FL Studio. See `bridge/README.md`.
 
 `wav-check` needs `numpy`. Windows runs a script by its extension and ignores the `#!` line, so each script has a
@@ -56,8 +59,8 @@ scripts inside FL Studio.
 ```sh
 pip install -r requirements-dev.txt
 python3 -m unittest discover -s tests
-ruff format --check bin/wav-check bin/fl-notes tests bridge
-ruff check bin/wav-check bin/fl-notes tests bridge
+ruff format --check bin/wav-check bin/fl-notes bin/instrument-calibrate tests bridge
+ruff check bin/wav-check bin/fl-notes bin/instrument-calibrate tests bridge
 ```
 
 The tests synthesize their WAV files and fake FL Studio's modules, so no audio or FL Studio is needed. That only
