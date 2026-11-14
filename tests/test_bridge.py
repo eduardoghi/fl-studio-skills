@@ -262,6 +262,18 @@ class PianoRollScript(unittest.TestCase):
         self.run_script({"id": "b", "action": "read"}, velocity=0.6)
         self.assertNotEqual(self.done()["result"]["fingerprint"], first)
 
+    def test_fingerprint_counts_velocity_in_fl_steps(self):
+        # 0.787 is what was written and 0.789 what FL kept (101/128), so both must give the same fingerprint.
+        self.run_script({"id": "a", "action": "read"}, velocity=0.787)
+        written = self.done()["result"]["fingerprint"]
+        self.run_script({"id": "b", "action": "read"}, velocity=101 / 128)
+        self.assertEqual(self.done()["result"]["fingerprint"], written)
+
+    def test_add_notes_stores_velocity_on_fl_steps(self):
+        note = dict(NOTE, velocity=0.787)
+        score, _ = self.run_script({"id": "a", "action": "add_notes", "payload": {"notes": [note]}})
+        self.assertEqual(score.added[0].velocity, 101 / 128)
+
     def test_a_bad_note_stops_the_whole_action(self):
         notes = [NOTE, {"pitch": "x", "start": 0, "length": 1}]
         score, _ = self.run_script({"id": "a", "action": "add_notes", "payload": {"notes": notes}})
