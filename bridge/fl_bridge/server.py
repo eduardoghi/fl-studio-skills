@@ -354,6 +354,52 @@ def fl_load_plugin(x: int, y: int) -> dict:
     return _loaded_channel()
 
 
+EFFECT_SLOTS = 10
+
+
+def effect_added(before, after):
+    """Return the one effect that appeared in the first empty slot, or raise if anything else changed.
+
+    before and after are a track's effect lists, [{"slot", "plugin"}]. Every effect of before must still be in its
+    slot with the same name, so an effect that replaced another is caught.
+    """
+    old = {e["slot"]: e["plugin"] for e in before}
+    new = {e["slot"]: e["plugin"] for e in after}
+    changed = [s for s in old if new.get(s) != old[s]]
+    if changed:
+        raise client.BridgeError(f"slots {changed} changed: {before} became {after}")
+    added = [s for s in new if s not in old]
+    first_free = min(s for s in range(EFFECT_SLOTS) if s not in old)
+    if added != [first_free]:
+        raise client.BridgeError(f"expected one new effect in slot {first_free}, got {added}: {after}")
+    return {"slot": first_free, "plugin": new[first_free]}
+
+
+def _track_effects(track):
+    return client.call("mixer_get", {"track": track})["effects"]
+
+
+@server.tool()
+def fl_mixer_add_effect(x: int, y: int, track: int) -> dict:
+    """Load the effect at a row of the browser into the first empty slot of a mixer track, and return the slot.
+
+    x and y come from fl_capture, as for fl_load_plugin. FL sends a browser effect to the track of the selected
+    channel, so a channel feeding the track must exist (point one at it with fl_channel_set) and it gets selected.
+    The track is read before and after. The call fails if the track is full, if the row isn't an effect, or if
+    anything but one new effect in the first empty slot appeared, which catches an effect replaced by mistake.
+    """
+    feeding = [c for c in client.call("channel_list") if c["track"] == track]
+    if not feeding:
+        raise ValueError(f"no channel feeds mixer track {track}. Point one at it with fl_channel_set first")
+    before = _track_effects(track)
+    if len(before) >= EFFECT_SLOTS:
+        raise ValueError(f"mixer track {track} has no empty slot")
+    client.call("channel_select", {"channel": feeding[0]["channel"]})
+    time.sleep(client.SETTLE_S)
+    after = window.load_effect(x, y, lambda: _track_effects(track))
+    return {"track": track, "via_channel": feeding[0]["channel"], **effect_added(before, after)}
+
+
 @server.tool()
 def fl_export(output: str, overwrite: bool = False) -> dict:
     """Export the project open in FL to a WAV, from memory, with FL staying open and behind other windows.

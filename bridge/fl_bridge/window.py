@@ -69,6 +69,7 @@ CLASS_DIALOG = "#32770"
 CLASS_RENDER = "TWAVRenderForm"
 CLASS_FLIP_TOOL = "TPRFlipForm"
 PLUGIN_MENU_SIZE = (247, 271)  # The browser's menu for a plugin. Folders and other rows open different ones.
+EFFECT_MENU_SIZE = (247, 233)  # The browser's menu for an effect, which has no Open in new channel row.
 FILE_MENU = (38, 25)  # FILE in the menu bar of the main window.
 FILE_MENU_EXPORT_DOWNS = 11  # Down presses from the top of FILE to Export, with the disabled row skipped.
 EXPORT_MENU_SIZE = (179, 358)  # The Export submenu. Import, one row above, opens a submenu of another size.
@@ -946,6 +947,34 @@ def load_plugin(x, y, channel_count, timeout=30):
     menu_keys(["down", "down", "enter"])  # The second item is Open in new channel.
     _wait(lambda: channel_count() > before, timeout, "FL didn't create the channel")
     return before
+
+
+@_shielded()
+def load_effect(x, y, effects, timeout=30):
+    """Send the effect at a browser row to the mixer track of the selected channel, through the row's menu.
+
+    effects returns the track's effect list. The menu of an effect has a known size, so another kind of row is
+    refused before anything is chosen. FL puts the effect in the track's first empty slot. Returns the list read
+    once it changed.
+    """
+    main = main_window()
+    _require_visible(main)
+    _wait(lambda: not open_menus(main), 3, "a menu is already open. Close it with fl_menu_keys(['escape'])")
+    before = effects()
+    left, top, _, _ = _rect(main)
+    _post_click(main, left + x, top + y, "right")
+    menus = _wait(lambda: open_menus(main), 3, "no menu opened at that point")
+    size = _rect(menus[0])[2:]
+    if size != EFFECT_MENU_SIZE:
+        menu_keys(["escape"])
+        raise WindowError(f"the menu at that point is {size}, not an effect's {EFFECT_MENU_SIZE}. Check the row")
+    menu_keys(["down", "enter"])  # The first item is Send to selected channel or focused plugin.
+
+    def changed():
+        now = effects()
+        return now if now != before else None
+
+    return _wait(changed, timeout, "FL didn't add the effect")
 
 
 def _dialog(main):

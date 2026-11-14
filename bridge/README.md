@@ -56,6 +56,11 @@ when FL has the focus, since someone is using it then.
   opened by `fl_click` stays invisible until it is chosen or escaped.
 - `fl_reveal` closes FL's menus and shows its windows again, for when a tool stopped halfway and left FL invisible.
 - `fl_load_plugin` opens a browser row in a new channel, and refuses a row that isn't a plugin.
+- `fl_mixer_add_effect` loads a browser effect into the first empty slot of a mixer track. FL's scripting API can't
+  load plugins, and the browser's Send to selected channel item puts an effect on the mixer track of the selected
+  channel, so the tool selects a channel feeding the track and refuses a track no channel feeds. It reads the track
+  before and after and fails unless exactly one effect appeared, in the first empty slot, with every other slot as
+  it was. Removing an effect still goes through the plugin window's menu (Delete, then Ok in the Confirm box).
 - `fl_set_ppq` sets the timebase in Options > Project general settings and reads it back. `fl_import_midi` imports a
   MIDI file through FILE > Import > MIDI file into a new empty pattern of the open project, reads and sets each
   option of the import form before Accept, and returns the project's state before and after, with a warning when

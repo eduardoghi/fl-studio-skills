@@ -74,6 +74,12 @@ the mixer track and slot goes from 0 to 9.
 - Parameter changes and `nextPreset` didn't enter the undo history, so keep the old values to restore them.
 - `plugins.getPadInfo(channel, -1, 1, pad)` gives the note of an FPC pad, and option 0 gives the pad count.
 - Which of Ample Guitar's amps is active isn't among the parameters that were listed.
+- The API reads and sets plugins but can't load or remove one. In the interface, a browser effect's right-click menu
+  starts with Send to selected channel or focused plugin, which puts the effect in the first empty slot of the
+  mixer track of the channel selected in the Channel Rack (clicking a mixer strip doesn't count). With no channel
+  selected that way it landed on the Master. A plugin window's menu (the arrow left of its caption) has Replace and
+  Delete, and Delete asks for Ok in a Confirm box. The bridge's `fl_mixer_add_effect` follows this path and checks
+  the slots before and after.
 
 ## Piano roll
 

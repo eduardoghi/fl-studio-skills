@@ -847,6 +847,56 @@ class Server(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.server.fl_channel_steps(0, "10x")
 
+    def test_effect_added_in_the_first_empty_slot(self):
+        before = [{"slot": 0, "plugin": "Reverb"}, {"slot": 2, "plugin": "Delay"}]
+        after = before + [{"slot": 1, "plugin": "Limiter"}]
+        self.assertEqual(self.server.effect_added(before, after), {"slot": 1, "plugin": "Limiter"})
+
+    def test_effect_that_replaced_another_is_refused(self):
+        before = [{"slot": 0, "plugin": "Reverb"}]
+        with self.assertRaisesRegex(client.BridgeError, r"slots \[0\] changed"):
+            self.server.effect_added(before, [{"slot": 0, "plugin": "Limiter"}])
+
+    def test_effect_in_an_unexpected_slot_is_refused(self):
+        with self.assertRaisesRegex(client.BridgeError, "slot 0"):
+            self.server.effect_added([], [{"slot": 3, "plugin": "Limiter"}])
+
+    def fake_mixer(self, channels, effects):
+        def call(name, params=None, **kwargs):
+            return {"channel_list": channels, "mixer_get": {"effects": effects}, "channel_select": {}}[name]
+
+        return call
+
+    def test_add_effect_needs_a_channel_feeding_the_track(self):
+        call = self.fake_mixer([{"channel": 0, "track": 1}], [])
+        with mock.patch.object(client, "call", side_effect=call), self.assertRaisesRegex(ValueError, "no channel"):
+            self.server.fl_mixer_add_effect(10, 10, 5)
+
+    def test_add_effect_refuses_a_full_track(self):
+        full = [{"slot": s, "plugin": "X"} for s in range(10)]
+        call = self.fake_mixer([{"channel": 2, "track": 5}], full)
+        with mock.patch.object(client, "call", side_effect=call), self.assertRaisesRegex(ValueError, "no empty"):
+            self.server.fl_mixer_add_effect(10, 10, 5)
+
+    def test_add_effect_selects_the_feeding_channel_and_checks_the_slot(self):
+        calls = []
+
+        def call(name, params=None, **kwargs):
+            calls.append((name, params))
+            return {"channel_list": [{"channel": 2, "track": 5}], "mixer_get": {"effects": []}, "channel_select": {}}[
+                name
+            ]
+
+        after = [{"slot": 0, "plugin": "Limiter"}]
+        with (
+            mock.patch.object(client, "call", side_effect=call),
+            mock.patch.object(client, "SETTLE_S", 0),
+            mock.patch.object(self.server.window, "load_effect", return_value=after),
+        ):
+            result = self.server.fl_mixer_add_effect(10, 10, 5)
+        self.assertIn(("channel_select", {"channel": 2}), calls)
+        self.assertEqual(result, {"track": 5, "via_channel": 2, "slot": 0, "plugin": "Limiter"})
+
 
 if __name__ == "__main__":
     unittest.main()
