@@ -1,8 +1,12 @@
-# Projects and rendered audio never belong in this repo.
+# Projects, plugin states and rendered audio never belong in this repo.
 *.flp
+*.rpp
+*.rpp-bak
+*.b64
+*.nam
 *.wav
-*.mp3
 *.flac
+*.mp3
 out/
 tmp/
 .tmp/
@@ -16,3 +20,5 @@ tmp/
 # Python
 __pycache__/
 .venv/
+.pytest_cache/
+.ruff_cache/
