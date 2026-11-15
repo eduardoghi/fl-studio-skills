@@ -107,6 +107,7 @@ pip install -r requirements-dev.txt
 python -m pytest
 ruff format --check bin/wav-check bin/instrument-calibrate src poc tests fl-studio/bin/fl-notes fl-studio/bridge fl-studio/tests
 ruff check bin/wav-check bin/instrument-calibrate src poc tests fl-studio/bin/fl-notes fl-studio/bridge fl-studio/tests
+lua-language-server --check reaper --checklevel=Warning --configpath=.luarc.json
 ```
 
 The tests synthesize their WAV files, run the REAPER client against a fake bridge and fake FL Studio's modules, so no
