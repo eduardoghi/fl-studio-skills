@@ -548,8 +548,18 @@ local info = { instance = IID, bridge = VERSION, reaper = reaper.GetAppVersion()
                resource = reaper.GetResourcePath(), exe = reaper.GetExePath() }
 publish(DIR, "info.json", json.encode(info), D.tmp)
 
+-- One copy per REAPER process. The copy loaded by __startup.lua doesn't run as an action, so set_action_options
+-- can't end it when `mps reaper start` launches another. The newest copy claims a non-persistent key instead, and
+-- an older copy that sees someone else's id stops. Requests left in its req/ never run, which the client reports
+-- as not_started.
+reaper.SetExtState("mps_bridge", "owner", IID, false)
+
 local last_beat = 0
 local function loop()
+  if reaper.GetExtState("mps_bridge", "owner") ~= IID then
+    os.remove(DIR .. SEP .. "heartbeat")
+    return
+  end
   local now = reaper.time_precise()
   if now - last_beat >= 1 then
     local f = io.open(DIR .. SEP .. "heartbeat", "w")
