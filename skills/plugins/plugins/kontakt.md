@@ -1,6 +1,7 @@
 # Kontakt 8
 
-Everything here is observed on version 8.14.1. The manual wasn't read for this note.
+Everything here is observed on version 8.14.1. The manual wasn't read for this note. The sections up to Controlling
+it were observed in FL Studio 26.1.x, and the REAPER section in REAPER 7.86 (details in `docs/poc-results.md`).
 
 ## Finding a library
 
@@ -41,3 +42,21 @@ The Kontakt instance reports through the bridge like any VST. Pass
 `named_only=False` to `fl_plugin_params` to see the `MIDI CC #` entries FL adds, which are the place to start when an
 instrument needs CC1 or CC11. Whether those entries reach an instrument wasn't tested, so render a test before
 relying on them.
+
+## In REAPER
+
+Observed in REAPER 7.86, with Evolution Indie Rock loaded:
+
+- The KONTAKT menu ignored a posted click there, unlike in FL, and opened with a real click. Its Load row then took a
+  posted click, and the file dialog took the `.nki` path without the mouse, as in FL.
+- Writing a saved state (`vst_chunk`) into the running instance didn't restore it. A changed parameter stayed
+  changed, and the parameter text went blank. Deleting the plugin, adding it again and writing the state into the new
+  instance restored it, and renders of the restored state were sample-identical to renders of the original.
+- Two reads of the state in a row gave different bytes of the same length, so a hash only proves that a stored file
+  didn't change. Compare Kontakt states by render.
+- The state with Evolution was about 1.8 MB of base64.
+- The parameter text appeared 1 to 6 s after a restore, but in some fresh instances it stayed empty although the
+  instrument had loaded. Don't wait on the text alone. Accept a stable text, or a state whose length stayed the same
+  after about 10 s.
+- `reaper -renderproject` exited with code 0xC000000D after every render of a project with Kontakt, although the files
+  were complete. Whether Kontakt causes it wasn't isolated yet.

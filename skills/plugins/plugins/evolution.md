@@ -1,7 +1,8 @@
 # Evolution guitars (Orange Tree Samples)
 
 The Evolution libraries share one engine. "Manual" means the Evolution Engine user guide, version 1.3.5, in our own
-words. "Observed" means Evolution Indie Rock (engine shown as 1.3.0) in Kontakt 8.14.1 Portable, FL Studio 26.1.7.
+words. "Observed" means Evolution Indie Rock (engine shown as 1.3.0) in Kontakt 8.14.1 Portable, FL Studio 26.1.7,
+unless it says REAPER 7.86.
 
 ## Overlapping notes
 
@@ -16,7 +17,8 @@ string each, needs that kind of voicing or a smaller range.
   for the legato range and for the separate slide range, so `fl_plugin_set` by name can't tell them apart. That is a
   limit of setting parameters by name in the bridge.
 - Manual. The engine keeps legato apart per MIDI channel, and a channel-based string mode picks the string from the
-  channel. The bridge writes no MIDI channel per note, so neither is available from the piano roll script.
+  channel. The FL bridge writes no MIDI channel per note, so neither is available from FL's piano roll script. REAPER
+  writes a channel per note, see Strings by MIDI channel.
 - Two notes on the same string need a small gap to be heard as two picks. A gap of 2 ticks at 96 PPQ was enough.
 - Observed in renders, by the pick transient above 3 kHz at the second note. A note starting 2 semitones above one
   still held rose about 1 dB (no pick, a hammer-on), the same pair without overlap rose 26 dB, and a pair 5 semitones
@@ -91,3 +93,21 @@ Observed with no snapshot loaded:
   below, which shifts the index of every channel after it, but not their notes.
 - Manual. `Channel-Based Strings` picks the string from the MIDI channel, channel 1 for the highest string by default.
   The legato logic also runs separately per MIDI channel, which needs Kontakt's MIDI input set to omni.
+
+## Strings by MIDI channel
+
+Observed in REAPER 7.86:
+
+- `Channel-Based Strings` sits deep in the SETUP list and isn't a host parameter. Dragging the list's scroll bar with
+  the real mouse reached it, and the wheel didn't scroll it. Its menu offers Disabled, MIDI Guitar, Bottom to Top and
+  Top to Bottom. Set it once and save the whole state (see `kontakt.md`, In REAPER, for restoring it).
+- With MIDI Guitar, E4 on channels 1 to 4 sounded on four strings. Its harmonics fell from -9.6 dB to -20.4, -29.7 and
+  -27.9 dB relative to the fundamental, as from the open high string to fretted notes on thicker strings, while four
+  repeats on channel 1 stayed within 3.4 dB of each other. So channel 1 is the highest string.
+- E2 on channel 1, below what the highest string can play, still sounded, so the engine doesn't reject an impossible
+  string. The note writer has to choose playable strings.
+- Two overlapping notes a tone apart on the same channel played as a hammer-on (the pick band above 3 kHz rose 1.1 dB
+  at the second note). On two channels the same pair was picked (23.3 dB), like the pair without overlap (25.8 dB).
+  Legato stays within a string.
+- 8 of 9 renders of the same part were sample-identical, and one differed on some notes, likely a round robin. Measure
+  this variation before reading a small difference between two renders as a change.

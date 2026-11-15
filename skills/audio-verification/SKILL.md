@@ -271,7 +271,7 @@ instrument-calibrate compare ref_snare.wav render_snare.wav --times snare_times.
 - A pitched instrument can answer velocity differently across its range. Calibrate a few notes spread over the
   range in use, render a second layout with other notes and velocities, and run `validate` on it. If interpolating
   in pitch clearly beats one mean curve, use it (`velocity` interpolates a note without its own curve). The round
-  robin sets how close any model can get. `plugins/ezbass.md` in fl-plugins has one measured case.
+  robin sets how close any model can get. `plugins/ezbass.md` in the plugins skill has one measured case.
 - When some of the reference's attacks start from silence and others from a sounding note, a 30 ms window starts
   at different points of the rise and biases the level of one group. Check the velocities by context (after a
   rest, after a note). The peak of the first 100 ms against the peak curve (`--key peak_db`) moves much less.

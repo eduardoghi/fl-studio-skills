@@ -34,8 +34,8 @@ class Skills(unittest.TestCase):
                 self.assertIn("Use ", frontmatter(skill / "SKILL.md").get("description", ""))
 
     def test_every_plugin_note_is_in_the_index(self):
-        index = (ROOT / "skills" / "fl-plugins" / "SKILL.md").read_text(encoding="utf-8")
-        for note in (ROOT / "skills" / "fl-plugins" / "plugins").glob("*.md"):
+        index = (ROOT / "skills" / "plugins" / "SKILL.md").read_text(encoding="utf-8")
+        for note in (ROOT / "skills" / "plugins" / "plugins").glob("*.md"):
             with self.subTest(note=note.name):
                 self.assertIn(f"`plugins/{note.name}`", index)
 
