@@ -20,7 +20,7 @@ Read only the file of the plugin in use:
 | EZdrummer 3 | `plugins/ezdrummer-3.md` | Note map measured, and its menus need the host in front |
 | EZbass | `plugins/ezbass.md` | sounds an octave under the note written, keyswitch map, slides at a fixed speed, overlaps play legato, FL can load an old VST2 build |
 | Evolution (Orange Tree) | `plugins/evolution.md` | Overlapping notes a tone apart become legato, unless each string gets its own MIDI channel |
-| Kontakt 8 | `plugins/kontakt.md` | Restore a saved state into a new instance, not the running one |
+| Kontakt 8 | `plugins/kontakt.md` | Its state bytes change on every read, so compare states by render |
 | Guitar Rig 7 | `plugins/guitar-rig-7.md` | Exposes its components only after a preset loads, which takes a real double click |
 
 Each file says where its facts come from. "Manual" means the maker's documentation, in our own words. "Observed"

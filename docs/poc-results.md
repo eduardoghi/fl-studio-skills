@@ -48,8 +48,13 @@ work folder of the song being rebuilt. The real case was bars 5 to 8 of its guit
 - Kontakt's state with Evolution was 1.8 MB of base64 and went through the bridge and JSON without trouble.
 - Two reads of Kontakt's state in a row gave different bytes of the same length, so its state can't be compared by
   hash. Valhalla's state read the same each time.
-- Writing a saved state into the running Kontakt didn't restore it (a changed parameter stayed changed and the
-  parameter text went blank). Deleting the plugin, adding it again and writing the state into the new instance did.
+- Writing a saved state into the running Kontakt looked like it didn't restore it (a changed parameter stayed changed
+  and the parameter text went blank). Deleting the plugin, adding it again and writing the state into the new
+  instance did. **Corrected later the same day.** That reading came only from parameter text read right after each
+  step, and Kontakt updates its text late. Rendering the two projects that test saved showed the "changed" project
+  sample-identical to the original, so the change had never reached the sound and the test couldn't tell anything
+  about restoring. Measured by render in `docs/state-checks.md`, writing the state into the running instance
+  restored it exactly.
 - Restore cycle on the channel test part, each step rendered in a separate process and compared with a render of the
   original state.
   - Restored into a fresh instance, the render was sample-identical.

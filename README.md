@@ -57,6 +57,8 @@ skill explains, and the FL Studio bridge has its own setup in `fl-studio/bridge/
   - `audio.py` checks rendered files and compares renders.
   - `windows.py` finds and answers dialogs, captures windows and clicks, for plugin interfaces with no API.
   - `manifest.py` collects hashes and plugin versions for experiment records.
+  - `rpp.py` reads the render settings and plugins of a saved project, for the record of a render.
+  - `state.py` saves plugin states and restores them with integrity and configuration checks.
 - `bin/` holds scripts that work on audio files from any DAW.
   - `wav-check` measures WAV files for the `audio-verification` skill. Run it with `--help` for the commands.
   - `instrument-calibrate` turns renders of isolated hits into a curve of attack level per note and velocity, which
@@ -68,7 +70,7 @@ skill explains, and the FL Studio bridge has its own setup in `fl-studio/bridge/
   - `bin/fl-notes` reads and writes the notes of many channels through that bridge, checking each write by reading it
     back.
 - `poc/` holds the proof of concept scripts for REAPER, kept as the evidence for `docs/poc-results.md`.
-- `docs/` holds the investigation behind the move to REAPER, the proof of concept results, the render standard and the
+- `docs/` holds the investigation behind the move to REAPER, the proof of concept results, the render standard, the state checks and the
   migration notes.
 
 Windows runs a script by its extension and ignores the `#!` line, so each script in `bin/` has a `.cmd` next to it

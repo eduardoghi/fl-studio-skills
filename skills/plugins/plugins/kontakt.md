@@ -49,9 +49,13 @@ Observed in REAPER 7.86, with Evolution Indie Rock loaded:
 
 - The KONTAKT menu ignored a posted click there, unlike in FL, and opened with a real click. Its Load row then took a
   posted click, and the file dialog took the `.nki` path without the mouse, as in FL.
-- Writing a saved state (`vst_chunk`) into the running instance didn't restore it. A changed parameter stayed
-  changed, and the parameter text went blank. Deleting the plugin, adding it again and writing the state into the new
-  instance restored it, and renders of the restored state were sample-identical to renders of the original.
+- A saved state (`vst_chunk`) restored exactly, by render, both written into a new instance (`mps state restore
+  --fresh`) and written into the running one, including a different state of the same library. That was Evolution
+  Indie Rock, and other libraries weren't tested. The fresh instance stays the default. An earlier note said the
+  running instance ignored the state, but that came from parameter text read too early and was withdrawn
+  (`docs/state-checks.md`).
+- Kontakt updates a parameter's text about a second after a set or a restore, so the text an answer carries is the
+  old one. Read the list again until it stops changing before comparing.
 - Two reads of the state in a row gave different bytes of the same length, so a hash only proves that a stored file
   didn't change. Compare Kontakt states by render.
 - The state with Evolution was about 1.8 MB of base64.

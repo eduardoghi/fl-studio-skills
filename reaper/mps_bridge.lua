@@ -483,6 +483,31 @@ COMMANDS["fx.state_set"] = { mutates = true, run = function(a)
   return { fx = fx_info(tr, i), length = #back, identical = back == chunk }
 end }
 
+-- Writes a saved state into a new instance of the same plugin, for plugins that ignore a state written into the
+-- running instance (Kontakt, see skills/plugins). The new instance is added right after the old one and checked
+-- before the old one is deleted, so a failure leaves the track as it was.
+COMMANDS["fx.restore_fresh"] = { mutates = true, run = function(a)
+  local tr = track_by_guid(need(a, "track", "string"))
+  local i = fx_index(tr, a)
+  local chunk = need(a, "chunk", "string")
+  local old = fx_info(tr, i)
+  local j = reaper.TrackFX_AddByName(tr, need(a, "name", "string"), false, -1000 - (i + 1))
+  if j < 0 then error("not_found: plugin " .. a.name) end
+  local new = fx_info(tr, j)
+  if new.ident ~= old.ident then
+    reaper.TrackFX_Delete(tr, j)
+    error("refused: '" .. a.name .. "' added " .. tostring(new.ident) .. ", not the binary of the effect being replaced")
+  end
+  if not reaper.TrackFX_SetNamedConfigParm(tr, j, "vst_chunk", chunk) then
+    reaper.TrackFX_Delete(tr, j)
+    error("failed: set vst_chunk on the new instance")
+  end
+  local _, back = reaper.TrackFX_GetNamedConfigParm(tr, j, "vst_chunk")
+  reaper.TrackFX_SetEnabled(tr, j, old.enabled)
+  reaper.TrackFX_Delete(tr, i)
+  return { replaced = old.guid, fx = fx_info(tr, i), length = #back, identical = back == chunk }
+end }
+
 COMMANDS["render.configure"] = { mutates = true, run = function(a)
   local fmt = RENDER_FORMATS[need(a, "format", "string")] or error("bad_args: format must be wav16, wav24 or wav32f")
   reaper.GetSetProjectInfo_String(0, "RENDER_FILE", need(a, "directory", "string"), true)

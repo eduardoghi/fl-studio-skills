@@ -64,6 +64,45 @@ def check(
     return {**facts, "ok": not failures, "failures": failures}
 
 
+def variation(references: list, candidates: list, *, max_lag_ms: float = 20.0) -> dict:
+    """Judge candidate renders against the natural variation between repeated renders of a reference.
+
+    The references are renders of one unchanged project, so their differences (round robin samples, modulation) are
+    the variation a change has to exceed to count. A candidate is "identical" when it matches a reference sample for
+    sample, "within" when its closest residual to a reference is no larger than the largest residual between two
+    references, and "outside" otherwise. With fewer than two references the variation is unknown, so a candidate is
+    only identical or different.
+    """
+    pairs = []
+    for i in range(len(references)):
+        for j in range(i + 1, len(references)):
+            c = compare(references[i], references[j], max_lag_ms=max_lag_ms)
+            pairs.append({"a": str(references[i]), "b": str(references[j]), **c})
+    residuals = [p["residual_db"] for p in pairs if p.get("comparable")]
+    natural = max(residuals) if residuals else None
+    judged = []
+    for cand in candidates:
+        rows = [{"reference": str(r), **compare(r, cand, max_lag_ms=max_lag_ms)} for r in references]
+        usable = [r for r in rows if r.get("comparable")]
+        best = min((r["residual_db"] for r in usable), default=None)
+        if any(r["identical"] for r in usable):
+            verdict = "identical"
+        elif natural is None or best is None:
+            verdict = "different, variation unknown"
+        elif best <= natural:
+            verdict = "within"
+        else:
+            verdict = "outside"
+        judged.append({"candidate": str(cand), "verdict": verdict, "closest_residual_db": best, "comparisons": rows})
+    return {
+        "references": len(references),
+        "identical_reference_pairs": sum(1 for p in pairs if p.get("identical")),
+        "natural_residual_db": natural,
+        "pairs": pairs,
+        "candidates": judged,
+    }
+
+
 def compare(a: str | Path, b: str | Path, *, max_lag_ms: float = 20.0) -> dict:
     """How far two renders of the same material differ.
 

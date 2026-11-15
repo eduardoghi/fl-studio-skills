@@ -69,6 +69,7 @@ Every call prints JSON and exits with a code that says what happened.
 | `fx.show` | `track`, `fx`, `show` | opens or hides the plugin window |
 | `fx.state_get` | `track`, `fx` | the whole state (`vst_chunk`) and its length |
 | `fx.state_set` | `track`, `fx`, `chunk` | whether the state read back identical |
+| `fx.restore_fresh` | `track`, `fx`, `chunk`, `name` | writes the state into a new instance of the same binary, then deletes the old one |
 | `render.configure` | `format`, `directory`, `pattern`, `start`, `end`, `srate`, `channels`, `tail_ms` and `fx_delay` (optional) | the settings read back and the files a render would write |
 
 Tracks and items are named by GUID. `fx` is the effect's index on the track or its GUID. `name` in `fx.add` takes a
@@ -88,14 +89,25 @@ type prefix, such as `VST3:Kontakt 8` or `JS:`. `format` is `wav16`, `wav24` or 
 ## Plugin state
 
 Some plugin settings aren't host parameters, such as a Kontakt instrument or a setting deep in a library's menus.
-Set them once, read the whole state with `fx.state_get`, and keep it as a file named by its SHA-256. Later projects
-take it back with `fx.state_set` instead of repeating the clicks.
+Set them once, store the whole state, and later projects take it back instead of repeating the clicks.
 
-How a state restores is a property of each plugin and isn't assumed for another one. The `plugins` skill records what
-was tested per plugin, such as Kontakt needing a fresh instance (delete, add again, then write) and ValhallaVintageVerb
-restoring in place. Check a restore at the level the work needs. A matching hash only says the file didn't change,
-matching parameter text is a partial check, and only a render compared with renders of the original state shows the
-sound came back.
+```text
+mps state save --track <guid> --fx 0 states/                                  # <sha256>.b64 and <sha256>.json
+mps state restore --track <guid> --fx 0 states/<sha256>.b64 --fresh "VST3i:Kontakt 8"
+mps wav variation --reference orig_1.wav orig_2.wav orig_3.wav --candidate restored.wav
+```
+
+- `save` waits for the plugin to settle and records its binary version and the text of every parameter.
+- `restore` refuses a file whose hash changed, writes the state (into a new instance with `--fresh`, through
+  `fx.restore_fresh`, which deletes the old one only after the new one took the state), waits again and lists every
+  parameter whose text differs from the record.
+- `variation` judges renders of the restored state against the variation between repeated renders of the original.
+
+A matching hash only says the file didn't change, matching parameter text is a partial check (some plugins report it
+late or not at all), and only the render comparison shows the sound came back. How a state restores is a property of
+each plugin and isn't assumed for another one. The `plugins` skill records what was tested per plugin, and
+`docs/state-checks.md` has the measurements. Use `--fresh` by default, since it doesn't depend on what the running
+instance held.
 
 ## Rendering
 

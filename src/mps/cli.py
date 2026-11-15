@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from mps import audio, manifest, reaper, render, rpp
+from mps import audio, manifest, reaper, render, rpp, state
 
 CODES = {reaper.OK: 0, reaper.ERROR: 1, reaper.NOT_STARTED: 3, reaper.UNCERTAIN: 4, reaper.EXPIRED: 5}
 BRIDGE = Path(__file__).resolve().parents[2] / "reaper" / "mps_bridge.lua"
@@ -129,6 +129,32 @@ def cmd_render(a):
     return emit(record, 0 if ok else 1)
 
 
+def _fx(value):
+    # an effect is named by its index on the track or by its GUID
+    return int(value) if value.isdigit() else value
+
+
+def cmd_state_save(a):
+    try:
+        return emit(state.save(a.track, _fx(a.fx), a.folder, instance=a.instance))
+    except (state.StateError, reaper.BridgeError) as e:
+        return emit({"ok": False, "error": str(e)}, 1)
+
+
+def cmd_state_restore(a):
+    try:
+        res = state.restore(a.track, _fx(a.fx), a.state, name=a.fresh, instance=a.instance)
+    except (state.StateError, reaper.BridgeError) as e:
+        return emit({"ok": False, "error": str(e)}, 1)
+    return emit(res, 0 if res["ok"] else 1)
+
+
+def cmd_wav_variation(a):
+    res = audio.variation(a.reference, a.candidate or [])
+    # a candidate outside the natural variation is a finding, not a failure of the command
+    return emit(res)
+
+
 def cmd_wav_info(a):
     return emit([audio.info(p) for p in a.files])
 
@@ -174,6 +200,24 @@ def main(argv=None):
     )
     rn.set_defaults(fn=cmd_render)
 
+    st = sub.add_parser("state", help="save a plugin's state and restore it with checks")
+    sts = st.add_subparsers(dest="action", required=True)
+    sv = sts.add_parser("save", help="store the state as <sha256>.b64 with the plugin and its parameter text")
+    sv.add_argument("--track", required=True, help="track GUID")
+    sv.add_argument("--fx", required=True, help="effect index or GUID")
+    sv.add_argument("folder")
+    sv.add_argument("--instance")
+    sv.set_defaults(fn=cmd_state_save)
+    rs2 = sts.add_parser("restore", help="write a stored state back and check its integrity and configuration")
+    rs2.add_argument("--track", required=True, help="track GUID")
+    rs2.add_argument("--fx", required=True, help="effect index or GUID")
+    rs2.add_argument("state", help="the <sha256>.b64 file")
+    rs2.add_argument(
+        "--fresh", metavar="NAME", help="restore into a new instance added by this name (needed for Kontakt)"
+    )
+    rs2.add_argument("--instance")
+    rs2.set_defaults(fn=cmd_state_restore)
+
     w = sub.add_parser("wav", help="facts about audio files")
     ws = w.add_subparsers(dest="action", required=True)
     i = ws.add_parser("info")
@@ -183,6 +227,10 @@ def main(argv=None):
     cp.add_argument("a")
     cp.add_argument("b")
     cp.set_defaults(fn=cmd_wav_compare)
+    va = ws.add_parser("variation", help="judge renders against the variation between repeated reference renders")
+    va.add_argument("--reference", nargs="+", required=True, help="renders of the unchanged project")
+    va.add_argument("--candidate", nargs="*", help="renders to judge")
+    va.set_defaults(fn=cmd_wav_variation)
 
     a = p.parse_args(argv)
     try:
