@@ -75,7 +75,8 @@ work folder of the song being rebuilt. The real case was bars 5 to 8 of its guit
   `RENDER_TARGETS` named the file. Every file was checked for presence, duration, format, channels, signal and being
   newer than the render.
 - The render process exited with code 0xC000000D after every render of a Kontakt project, with complete files. The
-  exit code is recorded and the file checks decide.
+  exit code was recorded and the file checks decided during the proof of concept. Since then `mps render` reports
+  such a render as an abnormal exit and not as a success, until the cause is known.
 - Natural variation. 8 of 9 renders of the same project were sample-identical, and one differed on 6 of 15 notes
   (round robin or random sample choice). A difference between two renders only means a change when it exceeds that.
 - A project with a missing plugin made the render process show "Project Load Warning". The client found that dialog

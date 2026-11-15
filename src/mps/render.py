@@ -9,15 +9,14 @@ dialogs are checked every half second, and the first one found (other than the r
 with its text and the process ended, so a failure takes seconds instead of the whole timeout.
 
 The render process exited with code 0xC000000D after every render of a Kontakt project in the tests, with complete
-files, so the exit code is reported but the files decide whether the render worked.
+files. The cause isn't known, so `mps render` doesn't count such a render as a normal one. It reports `files_ok` and
+`abnormal_exit` separately and `ok` only when the files check out and the process exited with 0.
 """
 
 import os
 import subprocess
 import time
 from pathlib import Path
-
-from mps import windows
 
 
 def reaper_exe() -> Path:
@@ -26,6 +25,9 @@ def reaper_exe() -> Path:
 
 
 def render_project(project: str | Path, *, timeout: float = 600.0) -> dict:
+    # imported here because it loads Windows libraries, while the rest of the package also runs on Linux in CI
+    from mps import windows
+
     project = Path(project)
     if not project.is_file():
         return {"ok": False, "error": f"project not found: {project}"}

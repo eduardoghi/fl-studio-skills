@@ -89,8 +89,11 @@ def cmd_render(a):
         if c.get("ok") and Path(path).stat().st_mtime < res.get("started", 0):
             c["ok"], c["failures"] = False, ["file is older than this render"]
         checks.append(c)
-    ok = res.get("ok", False) and all(c["ok"] for c in checks)
-    return emit({**res, "checks": checks, "ok": ok}, 0 if ok else 1)
+    files_ok = all(c["ok"] for c in checks)
+    # complete files from a process that crashed on exit are kept apart from a normal render (see render.py)
+    abnormal = res.get("returncode", 0) != 0
+    ok = res.get("ok", False) and files_ok and not abnormal
+    return emit({**res, "checks": checks, "files_ok": files_ok, "abnormal_exit": abnormal, "ok": ok}, 0 if ok else 1)
 
 
 def cmd_wav_info(a):
