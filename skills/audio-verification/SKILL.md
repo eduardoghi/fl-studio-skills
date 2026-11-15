@@ -82,6 +82,13 @@ counts its level.
 
 Change one thing per render.
 
+To judge a rebuild as a whole, export each part alone from the same pattern and compare its level relative to the sum
+of the parts, section by section, with the same parts in the reference's stems. The median difference across sections
+is the fixed gain a part needs, and the spread is what a fixed gain can't fix, such as a part that grows in the
+reference's arrangement. In one rebuild the drums sat about 6 dB low in every section. Correcting the three parts
+offline by their medians raised the correlation of the 100 ms envelope with the reference from 0.40-0.83 to
+0.67-0.94 per section, before any change to notes.
+
 ## Transcribing a part from a reference
 
 Notes taken from a recording are measurements with errors, not facts. Keep the raw output of every tool, record
@@ -178,6 +185,38 @@ These come from one guitar part with heavy stereo processing, again as examples 
   of a note of the other part with the same pitch class, and the same count with the layer's times shifted by a
   fraction of a beat. A rate near the shifted one means independent material. Mark the coinciding notes as probable
   leakage rather than deleting them.
+- Check that the rebuild's effects don't smear the harmony more than the reference does. On one guitar the dry
+  render's semitone spectrum matched the reference frame by frame better than the render with reverb, in every
+  section.
+- An audition of transcribed notes with one fixed level hides the layer's dynamics. Give each note the stem's level
+  at that note, or the comparison by ear will mislead.
+
+### Separated stems as targets
+
+A separator's stems are a guess about the instrumentation, and a processed instrument can be split across several.
+These checks come from one mix with a stereo processed guitar, a residual "other" stem and vocals.
+
+- Compare the same stem across separators. Two estimates of the guitar agreed to 8 to 19 dB (SDR between them), while
+  the two "other" stems agreed to about 0 dB, which means each separator put something different there. The sum of
+  guitar, other and piano agreed better across three separators than the guitar alone (15 to 27 dB against 8 to 19),
+  most in the loudest section. Where that happens, the split is arbitrary and the sum is the more reliable target for
+  pitch and level, at the cost of including whatever else fell into those stems.
+- Mid and side can tell different stories. The "other" stem was louder in side than in mid, with negative left-right
+  correlation, and its side carried a harmony that both separators extracted alike (chroma 0.82 to 0.91 between
+  them) but that differed from the guitar's at the same moment.
+- Test where a residual stem comes from against each other stem, not only the obvious one. For each candidate source,
+  correlate the residual's envelope with the source's envelope smoothed by exponential decays of a few T60 values,
+  and its chroma with the source's chroma integrated over the past. A reverb or delay tail correlates better as the
+  smoothing grows. A part split by the separator correlates at once. In one section the residual followed the
+  vocals' harmony and their smoothed envelope, so it was the vocals' reverb or delay, not an instrument. In another
+  it followed the guitar's envelope in sync.
+- Run the separator on a mix you built, with known parts, before blaming the reference's stems on an effect. A
+  guitar with a short stereo reverb and, separately, with a long dark tail added went 97 to 99% into the guitar stem,
+  tail included, and the "other" stem stayed 54 dB or more below. Those effects couldn't produce the reference's
+  residual, which pointed to a source the model doesn't call guitar.
+- To get a known part for such a test, export each part alone from the same pattern with the others muted and add
+  them offline. Subtracting an earlier render fails when the instrument isn't sample-identical between renders, as
+  with round robin samples or modulated effects.
 
 ## Velocities from a reference
 
