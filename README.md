@@ -37,6 +37,7 @@ scripts inside FL Studio.
 - `skills/fl-studio-scripting`: what scripts can and can't do inside FL Studio 2026, as observed on 26.1.4,
   including its file restrictions, callbacks and how to drive the interface from outside, with or without focus.
 
+- `skills/reaper`: drive REAPER through the mps bridge and command line, from building a project to a checked render.
 - `skills/plugins`: notes per plugin on what the controls do, defaults that cause trouble, how their state restores, and parameter names, each marked with the host it was measured in.
 - `skills/music-composition`: develop a musical idea through intentional changes, compared by listening instead of
   by adding layers, and compose the relationships between instrumental parts instead of independent patterns.
