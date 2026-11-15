@@ -149,18 +149,18 @@ for k, _, mix in VARIANTS:
     text = swap(template, '<VST "VST3i: Kontakt', kontakt_blocks[k])
     text = swap(text, '<VST "VST3: ValhallaVintageVerb', valhalla_blocks[f"mix{int(mix * 100)}"])
     out = folder / f"tpl_{lb}.rpp"
-    text = re.sub(r'RENDER_FILE "[^"]*"', f'RENDER_FILE "{str(out.with_suffix(".wav"))}"'.replace("\\", "\\\\"), text)
+    text = re.sub(r'RENDER_FILE "[^"]*"', f'RENDER_FILE "{out.with_suffix(".wav")!s}"'.replace("\\", "\\\\"), text)
     out.write_text(text, encoding="utf-8")
     tpl[lb] = out
 report["template_write_s"] = round(time.monotonic() - t, 4)
 
 # renders
-for lb in api:
-    a1 = render_one(api[lb])
-    first = api[lb].with_suffix(".wav")
+for lb, api_rpp in api.items():
+    a1 = render_one(api_rpp)
+    first = api_rpp.with_suffix(".wav")
     keep = folder / f"api_{lb}_run1.wav"
     first.replace(keep)
-    a2 = render_one(api[lb])
+    a2 = render_one(api_rpp)
     t1 = render_one(tpl[lb])
     v = audio.variation([keep, first], [tpl[lb].with_suffix(".wav")])
     report["template"][lb] = {
@@ -197,7 +197,7 @@ block[3] = block[3][: len(block[3]) // 2] + "\n"
 broken = folder / "tpl_broken.rpp"
 broken_text = text[:s] + "".join(block) + text[e:]
 broken_text = re.sub(
-    r'RENDER_FILE "[^"]*"', f'RENDER_FILE "{str(broken.with_suffix(".wav"))}"'.replace("\\", "\\\\"), broken_text
+    r'RENDER_FILE "[^"]*"', f'RENDER_FILE "{broken.with_suffix(".wav")!s}"'.replace("\\", "\\\\"), broken_text
 )
 broken.write_text(broken_text, encoding="utf-8")
 b = render_one(broken)
