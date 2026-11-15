@@ -17,7 +17,7 @@ what was changed on purpose. Statements are marked **Documented** (the ReaScript
 | Postprocessing | all off (`RENDER_NORMALIZE` with the flag 4<<16) | normalization, limiting, fades, trimming and padding change levels and length |
 | Speed | offline, full speed | the render doesn't depend on the audio device or on real time |
 | Load delay | `fx_delay` above 0 whenever a non-Cockos instrument is in the project (5 s was enough in the tests) | samplers rendered silence when the render started before their samples loaded |
-| Process | a new REAPER process that renders through `reaper/mps_render.lua`, waits 3 s and quits | quitting right after a render with Kontakt loaded crashed the process |
+| Process | a new REAPER process that renders through `reaper/mps_render.lua`, after the project's tempo is applied, then waits 3 s and quits | rendering at once used 120 BPM, and quitting at once after a render with Kontakt crashed the process |
 
 `render.configure` in the bridge sets all of these and reads them back. Format, sample rate, channels, start and end
 are arguments, `tail_ms` and `fx_delay` are optional, and the rest is fixed.
@@ -89,6 +89,21 @@ failure check, not which module caused it. It didn't record every crash, so the 
 
 So `mps render` renders from a script and waits 3 s before quitting (`--settle`), and any other exit code than 0 is
 still reported as an abnormal exit. `--mode renderproject` keeps the old way for comparison.
+
+## Rendering from a script
+
+**Tested.** Two more things went wrong in the first version of the script, and both are now handled.
+
+- When a script given on the command line starts, the project's tempo isn't applied yet. A 90 BPM project read 120
+  BPM at that moment and 90 a second later, and a render started at once played the MIDI at 120 BPM, with notes every
+  0.5 s instead of every 0.667 s. The earlier tests in this file used 120 BPM projects, which hid it. The script now
+  waits until the project is the current one and a second has passed, and records the tempo and the length of the
+  first quarter note it renders with. `mps render` fails a render whose quarter note doesn't match the saved tempo
+  (REAPER reports the tempo itself rounded to three decimals). Rendered this way, the 90 BPM project was identical to
+  its `-renderproject` render.
+- Loading a project with Kontakt and a load delay marked it as changed, so Quit asked whether to save, and the render
+  process was ended at that dialog after writing the file. The script now opens an empty project without the prompt
+  before quitting, which drops the change in memory and leaves the file as it was.
 
 ## Waiting for samples to load
 

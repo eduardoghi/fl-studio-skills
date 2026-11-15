@@ -88,6 +88,27 @@ def cmd_start(a):
     return emit({"started": str(BRIDGE)})
 
 
+def render_process_check(res: dict, settings: dict) -> dict:
+    """Whether the render process rendered the project as saved, from what reaper/mps_render.lua recorded. A script
+    that rendered before the project's tempo was applied played the MIDI at 120 BPM (docs/render-standard.md)."""
+    seen = res.get("seen")
+    if seen is None:
+        return {"ok": True, "checked": False}
+    if "error" in seen:
+        return {"ok": False, "checked": True, "failure": seen["error"]}
+    want, got, qn = settings.get("tempo"), seen.get("tempo"), seen.get("qn_seconds")
+    if want is None:
+        return {"ok": True, "checked": False, "tempo": got}
+    # the quarter note's length has full precision, while REAPER rounds the tempo it reports to three decimals
+    if qn is not None:
+        bad = abs(qn - 60 / want) > 1e-6 * (60 / want)
+    else:
+        bad = got is None or abs(got - want) > 1e-3
+    if bad:
+        return {"ok": False, "checked": True, "failure": f"rendered at {got} BPM, the project holds {want} BPM"}
+    return {"ok": True, "checked": True, "tempo": got, "qn_seconds": qn}
+
+
 def cmd_render(a):
     project = Path(a.project)
     settings, plugins = rpp.read(project) if project.is_file() else ({}, [])
@@ -118,9 +139,11 @@ def cmd_render(a):
     # complete files from a process that crashed on exit are kept apart from a normal render (see render.py)
     abnormal = res.get("returncode", 0) != 0
     standard_ok = not off_standard or a.allow_nonstandard
-    ok = res.get("ok", False) and files_ok and not abnormal and standard_ok
+    process = render_process_check(res, settings)
+    ok = res.get("ok", False) and files_ok and not abnormal and standard_ok and process["ok"]
     record = {
         **res,
+        "process_check": process,
         "ok": ok,
         "files_ok": files_ok,
         "abnormal_exit": abnormal,

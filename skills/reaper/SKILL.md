@@ -124,9 +124,10 @@ dither or postprocessing, offline at full speed, a load delay for instruments).
 mps render project.rpp --expect out.wav --samplerate 44100 --channels 2 --subtype FLOAT
 ```
 
-- The render process opens the project with `reaper/mps_render.lua`, which renders, waits 3 s (`--settle`) and quits
-  normally. Quitting at once, as `-renderproject` does (`--mode renderproject`), crashed every process that had
-  Kontakt loaded. It starts with `MPS_ROLE=render`, so the bridge doesn't start in it.
+- The render process opens the project with `reaper/mps_render.lua`, which waits for the project's tempo to apply,
+  renders, waits 3 s (`--settle`) and quits normally. Quitting at once, as `-renderproject` does (`--mode
+  renderproject`), crashed every process that had Kontakt loaded. The record's `process_check` confirms the render
+  used the saved tempo. It starts with `MPS_ROLE=render`, so the bridge doesn't start in it.
 - A dialog in the render process, such as a missing plugin, ends it in seconds with the dialog's text, instead of
   waiting for the timeout. The progress window doesn't count, and the `fx_delay` prompt is answered with the
   project's own delay.

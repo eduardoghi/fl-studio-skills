@@ -44,7 +44,7 @@ def render_settings(text: str) -> dict:
                 body = tokens(lines[j].strip())
                 j += 1
             top[key] = body
-        elif key.startswith(("RENDER_", "SAMPLERATE")) and key not in top:
+        elif key.startswith(("RENDER_", "SAMPLERATE", "TEMPO")) and key not in top:
             top[key] = t[1:]
 
     def field(key, idx, default=None):
@@ -72,6 +72,7 @@ def render_settings(text: str) -> dict:
         "normalize": field("RENDER_NORMALIZE", 0, 0),
         "resample": top.get("RENDER_RESAMPLE"),
         "project_srate": field("SAMPLERATE", 0),
+        "tempo": field("TEMPO", 0),
     }
 
 

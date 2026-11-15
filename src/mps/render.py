@@ -14,6 +14,7 @@ A process that ends with any other exit code than 0 isn't counted as a normal re
 `mps render` reports `files_ok` and `abnormal_exit` separately.
 """
 
+import json
 import os
 import subprocess
 import time
@@ -114,7 +115,16 @@ def render_project(
         cmd = [str(reaper_exe()), "-newinst", "-nosplash", "-renderproject", str(project)]
     else:
         return {"ok": False, "error": f"unknown render mode {mode!r}"}
-    env = {**os.environ, "MPS_ROLE": "render", "MPS_RENDER_SETTLE": f"{settle:g}"}
+    # what the render script saw when it rendered (its tempo above all), written next to the project
+    log = project.with_name(project.name + ".mps-render.json")
+    log.unlink(missing_ok=True)
+    env = {
+        **os.environ,
+        "MPS_ROLE": "render",
+        "MPS_RENDER_SETTLE": f"{settle:g}",
+        "MPS_RENDER_PROJECT": str(project.resolve()),
+        "MPS_RENDER_LOG": str(log),
+    }
     start = time.time()
     proc = subprocess.Popen(cmd, env=env)
     answered = False
@@ -142,10 +152,18 @@ def render_project(
             }
         time.sleep(0.5)
     code = proc.returncode
+    seen = None
+    if mode == "script":
+        try:
+            seen = json.loads(log.read_text(encoding="utf-8", errors="replace"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            seen = {"error": "the render script left no record"}
+        log.unlink(missing_ok=True)
     return {
         "ok": True,
         "returncode": code,
         "returncode_hex": f"0x{code & 0xFFFFFFFF:08X}",
         "seconds": round(time.time() - start, 2),
+        "seen": seen,
         **base,
     }

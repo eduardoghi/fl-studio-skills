@@ -25,7 +25,7 @@ STANDARD_RPP = """<REAPER_PROJECT 0.1 "7.86/x64" 1794772900
 def fake_render(monkeypatch, tmp_path):
     out = tmp_path / "out.wav"
 
-    def run(returncode, file_ok=True, extra=(), rpp_text=None, exists=False):
+    def run(returncode, file_ok=True, extra=(), rpp_text=None, exists=False, seen=None):
         if exists:
             out.write_bytes(b"")
         project = tmp_path / "p.rpp"
@@ -34,7 +34,7 @@ def fake_render(monkeypatch, tmp_path):
 
         def fake_project(project, timeout, **kw):
             out.write_bytes(b"")
-            return {"ok": True, "returncode": returncode, "started": 0.0}
+            return {"ok": True, "returncode": returncode, "started": 0.0, "seen": seen}
 
         monkeypatch.setattr(render, "render_project", fake_project)
         monkeypatch.setattr(audio, "check", lambda path, **kw: {"ok": file_ok, "failures": [] if file_ok else ["x"]})
@@ -88,3 +88,26 @@ def test_nonstandard_project_fails_unless_allowed(fake_render, capsys):
     r = result(capsys)
     assert not r["standard"]["ok"] and "wav24" in r["standard"]["deviations"][0]
     assert fake_render(0, rpp_text=wav24, extra=["--allow-nonstandard", "--overwrite"]) == 0
+
+
+def test_process_check_catches_a_render_at_the_wrong_tempo():
+    settings = {"tempo": 90}
+    assert cli.render_process_check({"seen": {"tempo": 90}}, settings)["ok"]
+    wrong = cli.render_process_check({"seen": {"tempo": 120}}, settings)
+    assert not wrong["ok"] and "120" in wrong["failure"]
+    assert not cli.render_process_check({"seen": {"error": "the render script left no record"}}, settings)["ok"]
+    assert cli.render_process_check({"seen": None}, settings) == {"ok": True, "checked": False}
+
+
+def test_wrong_tempo_fails_the_render(fake_render, capsys):
+    with_tempo = STANDARD_RPP.replace("SAMPLERATE 44100 1 0", "SAMPLERATE 44100 1 0\n  TEMPO 90 4 4 0")
+    assert fake_render(0, rpp_text=with_tempo, seen={"tempo": 120}) == 1
+    assert not result(capsys)["process_check"]["ok"]
+    assert fake_render(0, rpp_text=with_tempo, seen={"tempo": 90}, extra=["--overwrite"]) == 0
+
+
+def test_process_check_uses_the_quarter_note_length():
+    settings = {"tempo": 104.4858}
+    assert cli.render_process_check({"seen": {"tempo": 104.486, "qn_seconds": 60 / 104.4858}}, settings)["ok"]
+    assert not cli.render_process_check({"seen": {"tempo": 104.486, "qn_seconds": 0.5}}, settings)["ok"]
+    assert cli.render_process_check({"seen": {"tempo": 104.486}}, settings)["ok"]
