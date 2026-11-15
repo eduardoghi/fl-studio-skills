@@ -114,8 +114,10 @@ def call(
     while time.monotonic() < deadline:
         if res.exists():
             return _take(res)
-        if heartbeat_age(inst.path) > HEARTBEAT_MAX_AGE * 2:
-            break  # the bridge stopped beating, likely behind a modal dialog or a crash
+        # The bridge can't beat while it runs a command, so a stale heartbeat only ends the wait while the request is
+        # still unclaimed (REAPER hung or gone). A claimed one gets the whole timeout, as a slow plugin load needs.
+        if heartbeat_age(inst.path) > HEARTBEAT_MAX_AGE * 2 and req.exists():
+            break
         time.sleep(poll)
     if res.exists():
         return _take(res)

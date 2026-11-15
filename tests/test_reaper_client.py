@@ -119,3 +119,45 @@ def test_several_live_instances_need_a_choice(instance, tmp_path):
     with pytest.raises(reaper.BridgeError, match="several live"):
         reaper.find_instance()
     assert reaper.find_instance("def").id == "def"
+
+
+def test_claimed_command_outliving_the_heartbeat_still_returns(instance, monkeypatch):
+    # the real bridge can't beat while a command runs, so the beat stops once the request is claimed
+    monkeypatch.setattr(reaper, "HEARTBEAT_MAX_AGE", 0.1)
+    stop = threading.Event()
+
+    def blocking_bridge():
+        while not stop.is_set():
+            names = os.listdir(instance / "req")
+            if not names:
+                (instance / "heartbeat").write_text(str(time.time()))
+                time.sleep(0.01)
+                continue
+            name = names[0]
+            os.rename(instance / "req" / name, instance / "work" / name)
+            req = json.loads((instance / "work" / name).read_text())
+            time.sleep(0.6)  # longer than twice the heartbeat age, with no beat
+            tmp = instance / "tmp" / (name + ".tmp")
+            tmp.write_text(json.dumps({"id": req["id"], "status": "ok", "result": {}}))
+            os.rename(tmp, instance / "res" / name)
+            (instance / "work" / name).unlink()
+            return
+
+    t = threading.Thread(target=blocking_bridge)
+    t.start()
+    try:
+        res = reaper.call("fx.add", timeout=3)
+    finally:
+        stop.set()
+        t.join()
+    assert res["status"] == reaper.OK
+
+
+def test_unclaimed_request_to_a_hung_bridge_is_withdrawn_early(instance, monkeypatch):
+    monkeypatch.setattr(reaper, "HEARTBEAT_MAX_AGE", 0.2)
+    (instance / "heartbeat").write_text("1")
+    os.utime(instance / "heartbeat", (time.time() - 0.3, time.time() - 0.3))  # alive enough to be found, then stale
+    monkeypatch.setattr(reaper, "find_instance", lambda instance_id=None: reaper.Instance("abc", instance, {}, 0.0))
+    t0 = time.monotonic()
+    res = reaper.call("track.add", timeout=5)
+    assert res["status"] == reaper.NOT_STARTED and time.monotonic() - t0 < 2
