@@ -1,6 +1,6 @@
 ---
 name: audio-verification
-description: Check exported audio with measurements instead of guessing, since the agent can't listen. Use after rendering a mix or stem from FL Studio, when the user reports noise, clicks, thumps, harshness or low volume, to confirm that chords sound the notes that were written, to prepare level-matched versions for an A/B comparison, to audit the continuity of the transitions between sections, or to transcribe a part from a reference recording and check its rebuild against it.
+description: Check exported audio with measurements instead of guessing, since the agent can't listen. Use after rendering a mix or stem from a DAW (REAPER, or FL Studio for older projects), when the user reports noise, clicks, thumps, harshness or low volume, to confirm that chords sound the notes that were written, to prepare level-matched versions for an A/B comparison, to audit the continuity of the transitions between sections, or to transcribe a part from a reference recording and check its rebuild against it.
 ---
 
 # Verifying exported audio
@@ -37,7 +37,7 @@ needs numpy, so run `uv run --no-project --with numpy python <path to wav-check>
 | Dull | `measure` | The same band falling too far, 120-500 Hz taking over |
 | Hiss or a wave in the background | `timeline`, then `noise` | A floor that doesn't decay and a swing below a few Hz |
 | Thumps or clicks in the middle | `thumps` | The beat, then the note at that beat |
-| The render is much longer than the song | `timeline` | A constant floor keeping FL's tail detection open |
+| The render is much longer than the song | `timeline` | A constant floor keeping the host's tail detection open (seen in FL) |
 | Wrong notes, odd harmony | `chords` on the dry track | Missing pitch classes |
 
 ## What the numbers looked like in practice
@@ -82,7 +82,7 @@ counts its level.
 
 Change one thing per render.
 
-To judge a rebuild as a whole, export each part alone from the same pattern and compare its level relative to the sum
+To judge a rebuild as a whole, export each part alone from the same project (in FL, the same pattern) and compare its level relative to the sum
 of the parts, section by section, with the same parts in the reference's stems. The median difference across sections
 is the fixed gain a part needs, and the spread is what a fixed gain can't fix, such as a part that grows in the
 reference's arrangement. In one rebuild the drums sat about 6 dB low in every section. Correcting the three parts
@@ -237,7 +237,7 @@ These checks come from one mix with a stereo processed guitar, a residual "other
   guitar with a short stereo reverb and, separately, with a long dark tail added went 97 to 99% into the guitar stem,
   tail included, and the "other" stem stayed 54 dB or more below. Those effects couldn't produce the reference's
   residual, which pointed to a source the model doesn't call guitar.
-- To get a known part for such a test, export each part alone from the same pattern with the others muted and add
+- To get a known part for such a test, export each part alone from the same project with the others muted and add
   them offline. Subtracting an earlier render fails when the instrument isn't sample-identical between renders, as
   with round robin samples or modulated effects.
 
@@ -254,6 +254,10 @@ instrument-calibrate velocity curves.json --note 38 --anchor 120 -- -2 -9.5 -24
 instrument-calibrate validate curves.json held_out.json   # curves of notes or velocities left out of the first
 instrument-calibrate compare ref_snare.wav render_snare.wav --times snare_times.json --offset -1.677
 ```
+
+The `fl-notes write` line is the FL step. The layout's `notes` give `start` and `length` in beats and `velocity`
+from 0 to 1, so in REAPER write them with `midi.write` (the `reaper` skill) as `start_qn` = `start`, `end_qn` =
+`start` + `length` and `vel` = `velocity` × 127, rounded.
 
 - Calibrate each note and articulation on its own, with a few hits per velocity, since samples rotate. On one drum
   kit the spread between hits of the same velocity stayed under 1.5 dB for drums and reached 3 dB for cymbals.
@@ -289,7 +293,7 @@ instrument-calibrate compare ref_snare.wav render_snare.wav --times snare_times.
 ## Transition Continuity Audit
 
 When a passage between sections sounds broken, read the notes of every channel on both sides of the boundary
-(`fl-notes read`, or the score a generator wrote) before touching anything. Run a light pass over the main
+(`midi.read` through the `reaper` skill, `fl-notes read` in FL, or the score a generator wrote) before touching anything. Run a light pass over the main
 boundaries before the final export of a piece with several sections too, when the notes and the section boundaries
 are available. It doesn't need repeating after every small edit. Check four things in a window of a bar or two around
 each boundary:

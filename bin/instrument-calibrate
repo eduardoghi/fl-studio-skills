@@ -2,7 +2,7 @@
 """Calibrate how a virtual instrument answers velocity, and turn relative levels into velocities.
 
   instrument-calibrate layout cal.json --bpm 100 --notes 36,38,42 --long 49,51
-      calibration hits for fl-notes: each note at each velocity, a few times, spaced so tails don't overlap
+      calibration hits in the fl-notes format (beats, velocity 0-1), each note at each velocity, a few times, spaced so tails don't overlap
   instrument-calibrate analyze cal.json render.wav curves.json
       measure each hit of the render and keep mean and spread per note and velocity
   instrument-calibrate velocity curves.json --note 38 --anchor 120 -- -3 -12.5 -30
