@@ -92,6 +92,9 @@ ear. Agreement between tools raises confidence but doesn't confirm a note, since
 The points below come from transcribing one bass line from a separated stem. Treat the numbers as an example of
 what to check, not as thresholds for another recording.
 
+- Onset detectors that normalize by the maximum, as librosa's `onset_detect` does by default, lose a quiet stem to
+  one click. A separated stem had one at the first downbeat, 40 times its 99th percentile, and only 6 attacks were
+  left in two minutes. Normalize by a high percentile and clip instead.
 - Pitch trackers answer "what pitch is sounding", not "where does a note start". None of the four tried (pYIN,
   CREPE, PESTO and Basic Pitch) split repeated notes of the same pitch reliably, and the line had more repeated
   pairs than pitch changes. Take attacks from the audio (spectral flux, the envelope) and ask the trackers only for
@@ -140,6 +143,15 @@ These come from one guitar part with heavy stereo processing, again as examples 
 - Count tools as independent only across model families. The same model on stems from two separators, or two
   checkpoints of one model, make the same mistakes. Requiring two families beat both single tools and a stricter
   three-family rule, which kept precision high but lost half the notes.
+- Measure the time offset between the onset detector and each tool on the reference too, not only on the known
+  render. On the known render every tool agreed with the detector within about 20 ms, while on the reference the
+  tools put part of the attacks 50 to 90 ms after it. With a window of 50 ms on each side, the same attack became a
+  second point, and then a short note that the render plucked again. Letting a tool's note up to 90 ms after a
+  detected attack count for the nearest attack removed those points and didn't change the F score on the known
+  renders.
+- Before reading a higher onset count in the render as extra notes, measure the reference's spectral flux at the
+  extra points against random times with no note. Most extra points had flux far above that baseline. They were
+  softer attacks under the detector's threshold, not invented notes.
 - A tail is not a note. Ending a note when it is no longer present at all keeps the reverb in it. Ending it when it
   falls a fixed amount below its own peak got the median duration right on the known render.
 - Check that the notes can be played. On a guitar a new note on a string ends the one ringing on it, and the
@@ -155,6 +167,17 @@ These come from one guitar part with heavy stereo processing, again as examples 
 - A level per note in a chord can't come from broadband RMS. The level of the note's own semitone separates the
   notes, but check that it rises steadily with velocity on the instrument, since a sample layer with a different
   harmonic balance can make it fall.
+- Correcting each note's length by how long its pitch stays present in the reference and in the render didn't
+  converge. A second pass still wanted to move most of the same notes, and one note stretched past a stop. In a
+  dense part the presence of a single pitch is too noisy for per-note decisions, so judge durations by section
+  measures and by the stops.
+- An envelope that stays within a few dB, as in a compressed part with chords ringing into each other, has little
+  shape to correlate. A low correlation of the 100 ms envelope there says little about the notes. Compare the
+  attacks point by point instead.
+- To tell a second layer from leakage of another part in its stem, count the layer's notes that start within 50 ms
+  of a note of the other part with the same pitch class, and the same count with the layer's times shifted by a
+  fraction of a beat. A rate near the shifted one means independent material. Mark the coinciding notes as probable
+  leakage rather than deleting them.
 
 ## Velocities from a reference
 
@@ -174,6 +197,10 @@ instrument-calibrate compare ref_snare.wav render_snare.wav --times snare_times.
   kit the spread between hits of the same velocity stayed under 1.5 dB for drums and reached 3 dB for cymbals.
 - Use the attack level (RMS of the first 30 ms), not the peak. Curves were monotonic and far from straight, and the
   range from velocity 1 to 127 went from 15 dB on toms to 40 dB on a crash, so one mapping for every piece is wrong.
+- Check the attack measure against a render of known, varied velocities, dry and compressed. On a polyphonic guitar
+  part the 30 ms RMS kept a rank correlation of 0.55 to 0.79 with velocity, the rise in energy over the attack and
+  the rise above 2 kHz kept less, and spectral flux stayed under 0.4. Flux follows how much the spectrum changes,
+  which new pitches drive, more than how hard the note was played.
 - A level from a mixed or separated reference carries gain and processing. Take each hit's difference from the
   loudest hits of the same part, and pick the velocity of those loudest hits as an anchor. Where the transcription was
   right, the render matched the reference's relative level per note within 0.3 dB.
