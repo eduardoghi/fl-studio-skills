@@ -1,5 +1,5 @@
 # name=Claude Bridge
-# url=https://github.com/eduardoghi/fl-studio-skills
+# url=https://github.com/eduardoghi/music-production-skills
 """Runs requests from the fl-bridge server inside FL Studio.
 
 The server writes request.json next to this file and sends CC 110 on MIDI
