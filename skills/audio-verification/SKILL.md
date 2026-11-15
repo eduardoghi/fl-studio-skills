@@ -89,6 +89,29 @@ reference's arrangement. In one rebuild the drums sat about 6 dB low in every se
 offline by their medians raised the correlation of the 100 ms envelope with the reference from 0.40-0.83 to
 0.67-0.94 per section, before any change to notes.
 
+### Tone apart from playing
+
+To work on an instrument's sound without mixing in changes to the part, keep the MIDI fixed and change one link of the
+chain per render. Measure at the reference's own attack times, since the render plays the same notes:
+
+- how far the attack rises above the sustain right after it, broadband and above 2 kHz, where the pick sits
+- how far the sound falls between one attack and the next
+- crest factor, left-right correlation and the band profile normalized to the total
+
+What one guitar showed, as things to check rather than rules:
+
+- Compare the band profile with the reference band by band before trusting an amp and cabinet. Every cabinet tried
+  cut 6 to 12 dB of the band the reference was strongest in and lifted 2 to 4 kHz, while the plain signal sat within
+  about 2 dB, so the softer attack it gave came with the wrong tone.
+- The same compressor settings did very different things before and after the instrument's output. Read the crest
+  factor of each render rather than the threshold, and keep a compressor that lowers it without filling the gaps
+  between notes more than the reference does.
+- Width can come from the source instead of the reverb. Compare how the left and right attacks line up as well as
+  the overall correlation. Two takes with no timing spread kept the attacks together, as the reference did, and a
+  few milliseconds of spread already separated them.
+- Fill between notes depends on the notes too. Extra attacks in the part fill the gaps whatever the tone, so read
+  that measure again after fixing the playing.
+
 ## Transcribing a part from a reference
 
 Notes taken from a recording are measurements with errors, not facts. Keep the raw output of every tool, record

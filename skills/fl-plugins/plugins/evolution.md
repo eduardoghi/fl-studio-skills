@@ -41,6 +41,29 @@ Observed on Indie Rock with no snapshot loaded, notes 54, 61, 66 and 73, three h
   to 4 kHz with no snapshot, while Evolution Strawberry sat 6 dB higher from 1 to 2 kHz and 5 dB lower from 150 to
   300 Hz. Comparing libraries this way, on the same notes, picks one before any mixing.
 
+## Signal and tone chain
+
+Manual. The SETUP list has a signal blend between the guitar as recorded and an enhanced version processed to bring
+up the sustain, since a guitar is "attack heavy and light on the sustain". Indie Rock was recorded through a studio
+console, tube preamps and compressors, with no amplifier, so its as-recorded signal is close to a DI. The TONE chain
+runs distortion, tremolo, volume, wah, pedal reverb, EQ, compressor, chorus, flanger, rack reverb, delay, amp, spring
+reverb and cabinet, so the built-in compressor sits before the amp.
+
+Observed on Indie Rock with one MIDI part, measured against the part it was transcribed from:
+
+- The blend is the parameter `Signal` (0% as recorded). At 50 to 75% the pick attack above 2 kHz dropped by 2 to 8 dB
+  relative to the sustain that follows, the crest factor by 3 to 5 dB and the dip between notes by 3 to 6 dB, with the
+  band profile unchanged within 1 dB.
+- Every module's switch is a parameter named `On/Off`, as are their `Type`, `Gain` and `Mix`, so pick them by position
+  (`fl_plugin_set` with `position`, from `fl_plugin_params`). The text of a Kontakt parameter changes a moment after
+  it is set, and the answer to the set still shows the old text, so read it again after about 150 ms.
+- The amp has 9 types, the cabinet 34 types, and the microphones and their positions depend on the cabinet.
+- The built-in compressor lowered the crest factor much more than Fruity Compressor after the instrument at the same
+  threshold, ratio and times, which barely moved the peaks.
+- `Tracks` (Single, Double, Triple, Quad) layers separate takes left and right. With `Humanize` at 0 the left and right
+  attacks stayed together and the left-right correlation fell to 0.3 to 0.5, at 5% it fell to about 0.1 with the
+  attacks still together, and at 20% the attacks spread over about 13 ms.
+
 ## Initial state
 
 Observed with no snapshot loaded:
@@ -58,3 +81,12 @@ Observed with no snapshot loaded:
   below the first five rows can't be reached through the interface.
 - A library loads without a double click through KONTAKT menu > Load recent, which the bridge can click because
   Kontakt draws its menus inside the plugin window. Loading from the Libraries browser needs a double click.
+- The snapshot arrows in the instrument header did nothing with posted clicks, even after hovering, so factory
+  snapshots can't be stepped through from the bridge. The snapshot files are obfuscated, so their settings can't be
+  read from disk either. The tone modules are all parameters, so a sound can be built without them.
+- The gear icon at the left of the instrument header opens Instrument Options, a modal dialog that blocks FL and the
+  bridge until it is closed (WM_CLOSE on its window cancels it).
+- Cloning the channel (channel menu > Clone) copies the instrument with all its settings into a new channel right
+  below, which shifts the index of every channel after it, but not their notes.
+- Manual. `Channel-Based Strings` picks the string from the MIDI channel, channel 1 for the highest string by default.
+  The legato logic also runs separately per MIDI channel, which needs Kontakt's MIDI input set to omni.

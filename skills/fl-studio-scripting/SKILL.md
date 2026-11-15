@@ -175,6 +175,15 @@ and Ctrl+R both worked sent to the piano roll, and Ctrl+Alt+Y did nothing sent t
   between, the menu was gone, so the click on the row brings FL to the front again.
 - A posted click on the Velocity and Mapping tabs of EZdrummer's `E-Drums/MIDI In` panel did nothing, even with FL in
   front, while its buttons and menus answered.
+- Native Instruments plugins draw with Qt (`Qt6...QWindowIcon` windows). Guitar Rig 7 ignored posted clicks on its
+  preset list, and Kontakt 8 ignored them on the snapshot arrows, with FL in front and the pointer moved over the
+  button first. Check a plugin's answer to a posted click by reading its parameters back before planning on its
+  interface, and prefer parameters the host can set.
+- A click on a plugin icon can open a modal dialog, as Kontakt's Instrument Options, which blocks FL's message loop.
+  Every bridge call then waits until it times out. List FL's top-level windows to find the dialog (`#32770`) and post
+  `WM_CLOSE` to it to cancel.
+- Writing a request while FL still has the previous one open made `os.replace` fail once with access denied, so the
+  bridge retries the replace for about a second.
 - Keys skip disabled rows, so counts change with the state of the project. `Run last script again` only enables after
   a first run, for example. In a project that was never saved, `Delete unused files and save project` is disabled too,
   and Export moved one row up. Capture the menu and read the highlighted row before sending enter.

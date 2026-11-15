@@ -25,7 +25,14 @@ Spitfire libraries show a help bubble on first load. It covers the controls, and
 
 ## Controlling it
 
-The Kontakt instance reports through the bridge like any VST, but its parameters weren't listed for this note. Pass
+An instrument's own controls appear as parameters in the order of its panels, without the panel name, so names like
+`On/Off` repeat and the position tells them apart. Kontakt reports every value as 0.0 and updates the text a moment
+after a set, so read the text again after about 150 ms (`plugins/evolution.md` has a measured case).
+
+Kontakt draws its window with Qt. Its menus and some buttons answered posted clicks, but the snapshot arrows of an
+instrument header didn't, even with the pointer moved over them first.
+
+The Kontakt instance reports through the bridge like any VST. Pass
 `named_only=False` to `fl_plugin_params` to see the `MIDI CC #` entries FL adds, which are the place to start when an
 instrument needs CC1 or CC11. Whether those entries reach an instrument wasn't tested, so render a test before
 relying on them.
