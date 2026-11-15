@@ -265,8 +265,8 @@ as the transcription, many on sixteenth offbeats.
   requiring a tonal peak, it still invented about one pitch per attack, scattered over unrelated intervals. Pitches
   missing from a transcription need another source, such as a polyphonic editor.
 - An octave above a note sounding at the same time can be the lower note's second harmonic read as a note. Compare the
-  even-to-odd harmonic ratio of the lower note with a calibration of that note alone: a real upper note raises the even
-  harmonics well above it. The test only works one way, since a weak real note passes as a harmonic.
+  even-to-odd harmonic ratio of the lower note with a calibration of that note alone, since a real upper note raises
+  the even harmonics well above it. The test only works one way, since a weak real note passes as a harmonic.
 
 ## Which string played a note
 
