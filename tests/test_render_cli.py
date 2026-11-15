@@ -32,7 +32,7 @@ def fake_render(monkeypatch, tmp_path):
         if rpp_text is not None:
             project.write_text(rpp_text.format(wav=str(out).replace("\\", "\\\\")), encoding="utf-8")
 
-        def fake_project(project, timeout):
+        def fake_project(project, timeout, **kw):
             out.write_bytes(b"")
             return {"ok": True, "returncode": returncode, "started": 0.0}
 

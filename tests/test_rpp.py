@@ -69,3 +69,13 @@ def test_targets():
         str(Path("V:/r/take.wav"))
     ]
     assert render.targets({"file": "V:/r", "pattern": "$project", "format": "wav32f"}) == []
+
+
+def test_instruments_need_a_load_delay():
+    s = rpp.render_settings(PROJECT)
+    plugins = rpp.plugins(PROJECT)
+    assert render.deviations(s, plugins) == []
+    no_delay = dict(s, fx_delay=0)
+    assert any("fx_delay" in d for d in render.deviations(no_delay, plugins))
+    cockos = [{"type": "VST", "name": "VSTi: ReaSynth (Cockos)", "file": "reasynth.dll"}]
+    assert render.deviations(no_delay, cockos) == []

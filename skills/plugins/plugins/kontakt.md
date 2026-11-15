@@ -62,5 +62,6 @@ Observed in REAPER 7.86, with Evolution Indie Rock loaded:
 - The parameter text appeared 1 to 6 s after a restore, but in some fresh instances it stayed empty although the
   instrument had loaded. Don't wait on the text alone. Accept a stable text, or a state whose length stayed the same
   after about 10 s.
-- `reaper -renderproject` exited with code 0xC000000D after every render of a project with Kontakt, although the files
-  were complete. Whether Kontakt causes it wasn't isolated yet.
+- A REAPER process that quit right after rendering with Kontakt loaded, even with no instrument in it, ended with
+  code 0xC000000D, although the files were complete. Waiting 3 s before quitting avoided it, which `mps render` does.
+  Other instruments and effects tested didn't cause it (`docs/render-standard.md`).

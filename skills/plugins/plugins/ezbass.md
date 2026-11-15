@@ -56,3 +56,9 @@ Measured on notes 47, 54 and 59 with instrument-calibrate, three hits per veloci
   in pitch predicted notes 44, 51 and 56 and unmeasured velocities within 0.87 dB (median, worst 3.1 dB).
 - Timing an attack as the rise out of the dip in the low-band envelope put it 0 ms after the note-on for an isolated
   hit and 7.7 ms after it among other notes, where the previous note's release fills the dip.
+
+## Rendering in REAPER
+
+Observed in REAPER 7.86 (VST3 and VST2 builds of 1.3.4) on four notes rendered in a new process. With no load delay the file
+was pure silence in both runs, and with `fx_delay` 5 the notes sounded. Give the project a load delay
+(`docs/render-standard.md`).

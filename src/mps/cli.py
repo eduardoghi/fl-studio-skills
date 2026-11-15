@@ -85,7 +85,7 @@ def cmd_start(a):
 def cmd_render(a):
     project = Path(a.project)
     settings, plugins = rpp.read(project) if project.is_file() else ({}, [])
-    off_standard = render.deviations(settings) if settings else []
+    off_standard = render.deviations(settings, plugins) if settings else []
     # without --seconds, the length follows from the saved bounds and tail
     seconds = a.seconds if a.seconds is not None else render.expected_seconds(settings)
     # a render writes over its target without asking, which would destroy an earlier render kept as evidence
@@ -94,7 +94,12 @@ def cmd_render(a):
         return emit(
             {"ok": False, "error": "target files exist, pass --overwrite to replace them", "existing": existing}, 1
         )
-    res = render.render_project(project, timeout=a.timeout)
+    # REAPER asks before writing over a file when it renders from a script, so the files allowed to go are removed
+    for path in existing:
+        Path(path).unlink()
+    res = render.render_project(
+        project, timeout=a.timeout, mode=a.mode, settle=a.settle, fx_delay=settings.get("fx_delay") or 0.0
+    )
     checks = []
     for path in a.expect or []:
         c = audio.check(path, seconds=seconds, samplerate=a.samplerate, channels=a.channels, subtype=a.subtype)
@@ -194,6 +199,13 @@ def main(argv=None):
     rn.add_argument("--subtype", help="soundfile subtype, such as PCM_24 or FLOAT")
     rn.add_argument("--timeout", type=float, default=600.0)
     rn.add_argument("--overwrite", action="store_true", help="replace target files that already exist")
+    rn.add_argument(
+        "--mode",
+        choices=["script", "renderproject"],
+        default="script",
+        help="render through reaper/mps_render.lua and quit normally (default), or with -renderproject",
+    )
+    rn.add_argument("--settle", type=float, default=3.0, help="seconds to wait after the render before quitting")
     rn.add_argument("--manifest", help="where to write the render record (default: next to the first expected file)")
     rn.add_argument(
         "--allow-nonstandard", action="store_true", help="accept render settings that differ from the standard"

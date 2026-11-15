@@ -57,3 +57,9 @@ about 8% of the energy at 2-6 kHz with effects. With bright off it fell to about
 it reached 14%, which the listener called metallic.
 
 Distorted part on 57 Delight with Predrive on, `AMP-57D-Gain` 10, the Mid+Bridge pickup and doubling on.
+
+## Rendering in REAPER
+
+Observed in REAPER 7.86 (version 4.0.1) on four notes rendered in a new process. With no load delay the file
+was pure silence in both runs, and with `fx_delay` 5 the notes sounded. Give the project a load delay
+(`docs/render-standard.md`).

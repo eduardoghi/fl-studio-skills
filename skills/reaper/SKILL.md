@@ -112,10 +112,11 @@ instance held.
 ## Rendering
 
 Renders follow the standard in `docs/render-standard.md` (32-bit float WAV, 44.1 kHz, stereo, explicit bounds, no
-dither or postprocessing, offline at full speed).
+dither or postprocessing, offline at full speed, a load delay for instruments).
 
-1. `render.configure` with `format` `wav32f`, `srate` 44100, `channels` 2, the bounds and, when a sound must ring
-   out, `tail_ms`. It fixes dither and postprocessing off, and returns the settings and the `targets`.
+1. `render.configure` with `format` `wav32f`, `srate` 44100, `channels` 2, the bounds, `fx_delay` 5 when the project
+   has an instrument plugin (samplers rendered silence without it) and, when a sound must ring out, `tail_ms`. It
+   fixes dither and postprocessing off, and returns the settings and the `targets`.
 2. `project.save`, since the render reads the saved file.
 3. Render in a separate process, which leaves the open REAPER alone:
 
@@ -123,17 +124,19 @@ dither or postprocessing, offline at full speed).
 mps render project.rpp --expect out.wav --samplerate 44100 --channels 2 --subtype FLOAT
 ```
 
-- The render process starts with `MPS_ROLE=render`, so the bridge doesn't start in it.
+- The render process opens the project with `reaper/mps_render.lua`, which renders, waits 3 s (`--settle`) and quits
+  normally. Quitting at once, as `-renderproject` does (`--mode renderproject`), crashed every process that had
+  Kontakt loaded. It starts with `MPS_ROLE=render`, so the bridge doesn't start in it.
 - A dialog in the render process, such as a missing plugin, ends it in seconds with the dialog's text, instead of
-  waiting for the timeout. The progress window and the countdown of `fx_delay` don't count.
+  waiting for the timeout. The progress window doesn't count, and the `fx_delay` prompt is answered with the
+  project's own delay.
 - It refuses when a target file already exists, since a render writes over it without asking. Pass `--overwrite`
   only for a file that isn't kept as evidence.
 - Each expected file is checked for presence, format, channels, signal, being newer than the render, and the length
   the saved bounds and tail imply (or `--seconds`).
 - `ok` is true only when the files check out, the process exited with code 0 and the saved settings match the
-  standard (`--allow-nonstandard` accepts others). Renders of projects with Kontakt ended with code 0xC000000D with
-  complete files. Such a render reports `files_ok: true` and `abnormal_exit: true`, and isn't a normal success until
-  the cause is understood.
+  standard (`--allow-nonstandard` accepts others). A render whose process ended with another code reports
+  `files_ok` and `abnormal_exit: true` apart, and isn't a normal success even with complete files.
 - The record (`out.render.json` next to the file, or `--manifest`) keeps the project hash, the saved settings, the
   plugins with their binary versions, REAPER's version, the outcome and each file's facts and hash.
 - Repeated renders of the same project can differ, from round robin samples or modulation. Before reading a
