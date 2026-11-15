@@ -12,7 +12,7 @@ It depends on the MCP SDK only. The MIDI message goes straight through `winmm`.
 2. Copy the scripts into FL Studio's settings:
 
    ```sh
-   python bridge/install.py
+   python fl-studio/bridge/install.py
    ```
 
 3. In FL, open Options > MIDI settings, select the port under Input and set its controller type to
@@ -20,7 +20,7 @@ It depends on the MCP SDK only. The MIDI message goes straight through `winmm`.
 4. Register the server:
 
    ```sh
-   claude mcp add fl-bridge -- uv run --directory /path/to/fl-studio-skills/bridge fl-bridge
+   claude mcp add fl-bridge -- uv run --directory /path/to/music-production-skills/fl-studio/bridge fl-bridge
    ```
 
 5. Run Tools > Scripts > ClaudeBridge once from any piano roll. `fl_piano_roll_run` repeats the last script with
