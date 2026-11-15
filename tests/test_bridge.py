@@ -138,6 +138,25 @@ class DeviceScript(unittest.TestCase):
             "no parameter", self.ask("plugin_set", {"track": 9, "slot": 2, "name": "x", "value": 0.1}, "b")["error"]
         )
 
+    def test_plugin_set_picks_a_repeated_name_by_position(self):
+        positions = [
+            p["position"]
+            for p in self.ask("plugin_params", {"track": 9, "slot": 2, "contains": "mix"})["result"]["params"]
+        ]
+        self.assertEqual(positions, [3, 4])
+        answer = self.ask("plugin_set", {"track": 9, "slot": 2, "name": "mix", "value": 0.9, "position": 4}, "b")
+        self.assertEqual(answer["result"]["before"], 0.3)
+        self.assertEqual(answer["result"]["position"], 4)
+        self.assertEqual(self.fl.params[3][1], 0.2)
+
+    def test_plugin_set_refuses_a_position_holding_another_name(self):
+        error = self.ask("plugin_set", {"track": 9, "slot": 2, "name": "Mix", "value": 0.9, "position": 1})["error"]
+        self.assertIn("'Reverb size', not 'Mix'", error)
+        error = self.ask("plugin_set", {"track": 9, "slot": 2, "name": "Mix", "value": 0.9, "position": 9}, "b")[
+            "error"
+        ]
+        self.assertIn("no parameter at position 9", error)
+
     def test_plugin_set_refuses_a_value_out_of_range(self):
         self.assertIn(
             "between 0 and 1", self.ask("plugin_set", {"track": 9, "slot": 2, "name": "Mix", "value": 2})["error"]
@@ -708,6 +727,30 @@ class FakePianoRoll:
             answer = {"id": queue["id"], "ok": True, "result": result}
         client.write_json(self.folder / "pianoroll_done.json", answer)
         client.write_json(self.folder / "pianoroll_queue.json", {})
+
+
+class WriteJson(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "request.json"
+
+    def test_retries_a_replace_refused_while_fl_holds_the_file(self):
+        real, refusals = os.replace, [PermissionError(5, "Access is denied")] * 2
+
+        def flaky(src, dst):
+            if refusals:
+                raise refusals.pop()
+            real(src, dst)
+
+        with mock.patch.object(client.os, "replace", side_effect=flaky):
+            client.write_json(self.path, {"a": 1}, sleep=lambda s: None)
+        self.assertEqual(client.read_json(self.path), {"a": 1})
+
+    def test_gives_up_after_the_last_try(self):
+        refused = mock.patch.object(client.os, "replace", side_effect=PermissionError(5, "Access is denied"))
+        with refused, self.assertRaises(PermissionError):
+            client.write_json(self.path, {"a": 1}, sleep=lambda s: None)
 
 
 class Notes(unittest.TestCase):

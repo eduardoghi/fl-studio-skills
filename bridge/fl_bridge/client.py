@@ -70,11 +70,25 @@ def exclusive(folder, timeout=LOCK_TIMEOUT_S):
         _thread_lock.release()
 
 
-def write_json(path, payload):
-    """Replace the file in one step, so FL never reads half a request."""
+REPLACE_TRIES = 20
+
+
+def write_json(path, payload, sleep=time.sleep):
+    """Replace the file in one step, so FL never reads half a request.
+
+    Windows refuses the replace while FL still has the previous file open, which happened once in a run of quick
+    calls, so a refusal is retried for about a second before it is raised.
+    """
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload), encoding="utf-8")
-    os.replace(temporary, path)
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            sleep(0.05)
 
 
 def read_json(path):

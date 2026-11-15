@@ -35,6 +35,11 @@ old code, so a new parameter such as `name` in `fl_channel_set` fails its read b
 - Save the project or edit the Playlist. FL's scripting API offers neither.
 - Choose a preset by name. It can only step to the next or previous one.
 - Undo a plugin change through FL. Parameter changes stay out of its history, so `fl_plugin_set` returns the old value.
+- Click in plugins drawn with Qt, such as Kontakt's snapshot arrows or Guitar Rig's preset list, which ignore posted
+  clicks.
+
+`fl_plugin_params` lists each parameter's `position`. Pass it to `fl_plugin_set` when several parameters share the name,
+as the switches of a Kontakt instrument's modules do. The name must still match the parameter at that position.
 
 ## Working behind other windows
 

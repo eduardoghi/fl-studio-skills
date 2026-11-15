@@ -118,6 +118,7 @@ def _is_placeholder(name):
 
 def _param_row(i, name, index, slot):
     return {
+        "position": i,
         "name": name,
         "value": round(plugins.getParamValue(i, index, slot), 4),
         "text": plugins.getParamValueString(i, index, slot).strip(),
@@ -359,7 +360,17 @@ def _h_plugin_set(params):
     value = float(params["value"])
     if not 0.0 <= value <= 1.0:
         raise ValueError("value must be between 0 and 1")
-    position = _find_param(index, slot, params["name"])
+    if params.get("position") is None:
+        position = _find_param(index, slot, params["name"])
+    else:
+        # Kontakt instruments repeat names such as On/Off in every module, so the caller picks one by position
+        # from plugin_params and the name confirms it is still the parameter it read.
+        position = int(params["position"])
+        if not 0 <= position < plugins.getParamCount(index, slot):
+            raise ValueError("no parameter at position " + str(position))
+        found = plugins.getParamName(position, index, slot)
+        if found.strip().lower() != params["name"].strip().lower():
+            raise ValueError("parameter " + str(position) + " is " + repr(found) + ", not " + repr(params["name"]))
     before = plugins.getParamValue(position, index, slot)
     plugins.setParamValue(value, position, index, slot)
     row = _param_row(position, plugins.getParamName(position, index, slot), index, slot)

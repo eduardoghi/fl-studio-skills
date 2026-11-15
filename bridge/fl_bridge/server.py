@@ -200,12 +200,18 @@ def fl_plugin_set(
     channel: int | None = None,
     track: int | None = None,
     slot: int | None = None,
+    position: int | None = None,
 ) -> dict:
     """Set a plugin parameter found by its exact name, and return the old and new values.
 
-    value goes from 0 to 1. Read the result's text field, since the scale of each parameter differs.
+    value goes from 0 to 1. Read the result's text field, since the scale of each parameter differs. When several
+    parameters share the name, as the On/Off of each module in a Kontakt instrument, pass the position that
+    fl_plugin_params lists for the one wanted. The name must still match the parameter at that position.
     """
-    return client.call("plugin_set", {**_target(channel, track, slot), "name": name, "value": value}, timeout=20)
+    args = {**_target(channel, track, slot), "name": name, "value": value}
+    if position is not None:
+        args["position"] = position
+    return client.call("plugin_set", args, timeout=20)
 
 
 @server.tool()
