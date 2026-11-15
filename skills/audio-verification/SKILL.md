@@ -82,6 +82,13 @@ counts its level.
 
 Change one thing per render.
 
+Two renders of the same project don't always match. Sampled instruments rotate samples (round robin), and modulated
+effects start at a different phase each time. In one rebuild no two of four renders of a guitar part matched, with
+residuals up to -3 to -5 dB between repeats, and a reverb with its default modulation never rendered the same twice.
+Before reading a difference between two versions as a change, render each a few times and judge it against the
+spread between repeats (`mps wav variation` in this repository). Keep the effect as it will be in the mix and allow
+for its variation, or turn its modulation off only for the comparison and say so.
+
 To judge a rebuild as a whole, export each part alone from the same project (in FL, the same pattern) and compare its level relative to the sum
 of the parts, section by section, with the same parts in the reference's stems. The median difference across sections
 is the fixed gain a part needs, and the spread is what a fixed gain can't fix, such as a part that grows in the

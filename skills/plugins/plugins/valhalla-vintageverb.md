@@ -54,5 +54,7 @@ renders were identical, with residuals of -5.0 to -16.4 dB between them, and the
 With `ModDepth` at 0 the three renders were sample-identical. The modulation seems to start at a different phase each
 time. Behind Kontakt, at `Mix` 50 %, repeats of one project differed by -4.5 to -7.0 dB.
 
-So with modulation on, two renders of the same project don't match, and a comparison between versions has to use
-several renders of each, or set `ModDepth` to 0 while comparing what comes before the reverb.
+So with modulation on, two renders of the same project don't match. That is part of how it sounds, so a final mix can
+keep it, but a comparison has to allow for it. Render each version several times and judge the difference against the
+spread between repeats (`mps wav variation`), or set `ModDepth` to 0 only while comparing what comes before the reverb,
+and say which was done.
