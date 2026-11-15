@@ -18,8 +18,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/mps"]
 
-[tool.ruff]
-line-length = 120
-
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# The FL Studio tests are unittest cases, which pytest also runs. CI installs only requirements-dev.txt, so the
+# package is imported from src/ instead of being installed.
+testpaths = ["tests", "fl-studio/tests"]
+pythonpath = ["src"]

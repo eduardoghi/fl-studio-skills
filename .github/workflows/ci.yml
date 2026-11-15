@@ -42,8 +42,8 @@ jobs:
                   python-version: "3.14"
             - run: pip install -r requirements-dev.txt
             # Scripts in bin/ have no extension, so ruff only sees them when named.
-            - run: ruff format --check bin/wav-check bin/instrument-calibrate tests fl-studio/bin/fl-notes fl-studio/bridge fl-studio/tests
-            - run: ruff check bin/wav-check bin/instrument-calibrate tests fl-studio/bin/fl-notes fl-studio/bridge fl-studio/tests
+            - run: ruff format --check bin/wav-check bin/instrument-calibrate src poc tests fl-studio/bin/fl-notes fl-studio/bridge fl-studio/tests
+            - run: ruff check bin/wav-check bin/instrument-calibrate src poc tests fl-studio/bin/fl-notes fl-studio/bridge fl-studio/tests
 
     test:
         name: test on ${{ matrix.os }}
@@ -52,7 +52,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                # Windows is where FL Studio runs, and macOS is left out until something here depends on it.
+                # Windows is where REAPER and FL Studio run here, and macOS is left out until something here depends on it.
                 os: [ubuntu-latest, windows-latest]
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -62,5 +62,5 @@ jobs:
               with:
                   python-version: "3.14"
             - run: pip install -r requirements-dev.txt
-            - run: python -m unittest discover -s tests
-            - run: python -m unittest discover -s fl-studio/tests
+            # pytest also runs the unittest cases, and pyproject.toml names both test folders.
+            - run: python -m pytest
