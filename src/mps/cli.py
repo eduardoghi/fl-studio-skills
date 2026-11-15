@@ -53,16 +53,22 @@ def cmd_prune(a):
     # keeps any folder with a request in work/, which records a command whose outcome is still unknown
     import shutil
 
-    removed, kept = [], []
+    removed, kept, stale = [], [], 0
+    limit = a.older_than * 60
     for i in reaper.list_instances():
-        if i.heartbeat_age < a.older_than * 60:
+        if i.heartbeat_age < limit:
+            # a live instance keeps the responses that arrived after their client gave up, until they are this old
+            for f in (i.path / "res").glob("*.json"):
+                if time.time() - f.stat().st_mtime > limit:
+                    f.unlink()
+                    stale += 1
             continue
         if any((i.path / "work").iterdir()):
             kept.append(i.id)
             continue
         shutil.rmtree(i.path)
         removed.append(i.id)
-    return emit({"removed": removed, "kept_with_unfinished_requests": kept})
+    return emit({"removed": removed, "kept_with_unfinished_requests": kept, "stale_responses_removed": stale})
 
 
 def cmd_install(a):
