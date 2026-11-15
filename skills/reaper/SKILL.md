@@ -139,9 +139,9 @@ mps render project.rpp --expect out.wav --samplerate 44100 --channels 2 --subtyp
   `files_ok` and `abnormal_exit: true` apart, and isn't a normal success even with complete files.
 - The record (`out.render.json` next to the file, or `--manifest`) keeps the project hash, the saved settings, the
   plugins with their binary versions, REAPER's version, the outcome and each file's facts and hash.
-- Repeated renders of the same project can differ, from round robin samples or modulation. Before reading a
-  difference between two versions as a change, render one of them a few times and compare with `mps wav compare`,
-  which reports the lag, the residual and whether the files are identical.
+- Repeated renders of the same project can differ, from round robin samples or modulation (ValhallaVintageVerb with
+  its default modulation never rendered the same twice). Before reading a difference between two versions as a
+  change, render each a few times and judge them with `mps wav variation`, or turn the modulation off while comparing.
 
 ## Plugin windows
 
@@ -157,5 +157,5 @@ Deferred scripts kept running while a plugin or REAPER showed a modal dialog, so
 - No host API loads a Kontakt `.nki` or snapshot. Load it once through the interface and keep the state.
 - The scripting API has no ARA access, so Melodyne and SpectraLayers are tools for a person working in REAPER, and
   their results come back as exported files.
-- Writing an `.rpp` file directly instead of building through the API wasn't adopted. The comparison is open in
-  `docs/reaper-investigation.md`.
+- Projects are built through the API. Writing `.rpp` text from a template was measured and not adopted
+  (`docs/reaper-investigation.md`). Reading a saved project, as `mps render` does for its record, is fine.

@@ -46,3 +46,13 @@ field of the answer.
 Observed in REAPER 7.86. The state (`vst_chunk`) read the same bytes each time, and it restored exactly both into the
 running instance and into a fresh one, with every displayed value back as saved. A project saved and opened in a new
 REAPER process gave the same state byte for byte. So a hash of this plugin's state does compare configurations.
+
+## Repeated renders differ
+
+Observed in REAPER 7.86, rendering a tone through the default instance three times in separate processes. No two
+renders were identical, with residuals of -5.0 to -16.4 dB between them, and the difference grew through each file.
+With `ModDepth` at 0 the three renders were sample-identical. The modulation seems to start at a different phase each
+time. Behind Kontakt, at `Mix` 50 %, repeats of one project differed by -4.5 to -7.0 dB.
+
+So with modulation on, two renders of the same project don't match, and a comparison between versions has to use
+several renders of each, or set `ModDepth` to 0 while comparing what comes before the reverb.

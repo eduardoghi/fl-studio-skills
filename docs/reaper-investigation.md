@@ -73,3 +73,24 @@ Writing RPP text directly has one advantage found so far (Tested). Through the A
 loaded in the interactive instance (Kontakt took 1 to 6 s to settle) and relies on the plugin saving its own state
 again, while a captured state could be written into an RPP file unchanged. That matters for large batches of
 candidates, and is worth measuring before adopting it.
+
+### Measured (Tested, `poc/p12_rpp_template.py`)
+
+Four variants (two Kontakt states with Evolution, two `Mix` settings of ValhallaVintageVerb, one part of six notes)
+were built through the API and written from a template made of the first API project, by swapping each plugin's whole
+`<VST ...>` block captured from the API projects and the render file name.
+
+| Question | Through the API | From the template |
+|---|---|---|
+| Time per variant | 3.0 to 3.3 s (the Kontakt restore and settling) | under 0.02 s, after capturing the blocks from projects the API built |
+| Text | | identical to the API project, or differing only in item numbering, colors and Kontakt's state bytes, which change on every read |
+| Loading | | no dialog, and the bridge read back both plugins and `Mix` at 50 % |
+| Render | each about 13 s, with the 5 s load delay | the same |
+| Sound | repeats differed by -4.5 to -7.0 dB | within the same spread, except two of four template renders that also differed near one note (unexplained) |
+| A damaged Kontakt block | | the render process crashed (0xC0000005) with no file and no dialog |
+
+The repeats differed because VintageVerb's modulation changes between renders (see `skills/plugins`), so this test
+couldn't show sound equivalence more closely than that. With the render itself taking about four times as long as
+building through the API, a template saves little per variant, needs the API anyway to capture each state, and turns
+a damaged block into a crash. Projects stay built through the API. A template is worth measuring again for a batch
+large enough that building time matters, with the modulation off.
