@@ -18,6 +18,56 @@ import subprocess
 import time
 from pathlib import Path
 
+# The render standard for anything measured or compared (docs/render-standard.md). Float keeps peaks above 0 dBFS,
+# and dither, normalization and the other postprocessing would change the samples between versions.
+STANDARD = {"format": "wav32f", "srate": 44100, "channels": 2, "speed": 0, "project_srate": 44100}
+NO_POSTPROCESSING = 4 << 16  # RENDER_NORMALIZE flag that disables normalize, limit, fades, trim and pad
+DITHER_ON = 1 | 2  # RENDER_DITHER flags for dither and noise shaping on the master mix
+
+
+def deviations(settings: dict) -> list[str]:
+    """How a project's saved render settings (from rpp.render_settings) differ from the standard."""
+    out = [f"{k} is {settings.get(k)!r}, the standard is {v!r}" for k, v in STANDARD.items() if settings.get(k) != v]
+    norm = settings.get("normalize") or 0
+    if norm and not norm & NO_POSTPROCESSING:
+        out.append(f"render postprocessing is on (RENDER_NORMALIZE {norm})")
+    if (settings.get("dither") or 0) & DITHER_ON:
+        out.append(f"dither is on (RENDER_DITHER {settings.get('dither')})")
+    if settings.get("bounds") != 0:
+        out.append(f"bounds are {settings.get('bounds')!r}, the standard is explicit start and end (0)")
+    return out
+
+
+def targets(settings: dict) -> list[Path]:
+    """The file a project's saved settings render to, when it can be told without REAPER.
+
+    The bridge sets a directory and a plain name, which REAPER saves joined in RENDER_FILE. A pattern with wildcards
+    (such as $project) only REAPER expands, so it gives nothing here and the caller's --expect list has to name it.
+    """
+    file, pattern = settings.get("file") or "", settings.get("pattern") or ""
+    ext = {"wav16": ".wav", "wav24": ".wav", "wav32f": ".wav"}.get(settings.get("format") or "")
+    if not file or not ext:
+        return []
+    if not pattern:
+        p = Path(file)
+        return [p if p.suffix.lower() == ext else p.with_name(p.name + ext)]
+    if any(c in pattern for c in "$*?"):
+        return []
+    return [Path(file) / (pattern + ext)]
+
+
+def expected_seconds(settings: dict) -> float | None:
+    """The length a render with explicit bounds should have, with its tail when the tail applies to them."""
+    if settings.get("bounds") != 0 or settings.get("start") is None or settings.get("end") is None:
+        return None
+    tail = settings.get("tail_ms", 0) / 1000 if settings.get("tail_flag", 0) & 1 else 0.0
+    return settings["end"] - settings["start"] + tail
+
+
+# Dialogs a normal render shows, which must not count as failures. The render's progress window, and the countdown
+# REAPER shows when a project asks to wait for FX to load samples before rendering (RENDER_DELAY).
+PROGRESS_DIALOGS = ("Rendering to file", "Render Queue Delay")
+
 
 def reaper_exe() -> Path:
     env = os.environ.get("MPS_REAPER_EXE")
@@ -43,8 +93,7 @@ def render_project(project: str | Path, *, timeout: float = 600.0) -> dict:
                 "error": f"render process still running after {timeout:.0f} s, killed",
                 "started": start,
             }
-        # the progress window of the render is a dialog too, and must not count as a failure
-        found = [d for d in windows.dialogs(pid=proc.pid) if not d["title"].startswith("Rendering to file")]
+        found = [d for d in windows.dialogs(pid=proc.pid) if not d["title"].startswith(PROGRESS_DIALOGS)]
         if found:
             d = found[0]
             proc.kill()

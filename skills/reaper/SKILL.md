@@ -69,7 +69,7 @@ Every call prints JSON and exits with a code that says what happened.
 | `fx.show` | `track`, `fx`, `show` | opens or hides the plugin window |
 | `fx.state_get` | `track`, `fx` | the whole state (`vst_chunk`) and its length |
 | `fx.state_set` | `track`, `fx`, `chunk` | whether the state read back identical |
-| `render.configure` | `format`, `directory`, `pattern`, `start`, `end`, `srate`, `channels` | the settings read back and the files a render would write |
+| `render.configure` | `format`, `directory`, `pattern`, `start`, `end`, `srate`, `channels`, `tail_ms` and `fx_delay` (optional) | the settings read back and the files a render would write |
 
 Tracks and items are named by GUID. `fx` is the effect's index on the track or its GUID. `name` in `fx.add` takes a
 type prefix, such as `VST3:Kontakt 8` or `JS:`. `format` is `wav16`, `wav24` or `wav32f`.
@@ -99,23 +99,31 @@ sound came back.
 
 ## Rendering
 
-1. `render.configure` with explicit settings, and check the `targets` it returns.
+Renders follow the standard in `docs/render-standard.md` (32-bit float WAV, 44.1 kHz, stereo, explicit bounds, no
+dither or postprocessing, offline at full speed).
+
+1. `render.configure` with `format` `wav32f`, `srate` 44100, `channels` 2, the bounds and, when a sound must ring
+   out, `tail_ms`. It fixes dither and postprocessing off, and returns the settings and the `targets`.
 2. `project.save`, since the render reads the saved file.
 3. Render in a separate process, which leaves the open REAPER alone:
 
 ```text
-mps render project.rpp --expect out.wav --seconds 12.48 --samplerate 44100 --channels 2 --subtype FLOAT
+mps render project.rpp --expect out.wav --samplerate 44100 --channels 2 --subtype FLOAT
 ```
 
 - The render process starts with `MPS_ROLE=render`, so the bridge doesn't start in it.
 - A dialog in the render process, such as a missing plugin, ends it in seconds with the dialog's text, instead of
-  waiting for the timeout.
-- Each expected file is checked for presence, duration, format, channels, signal and being newer than the render.
-- `ok` is true only when the files check out and the process exited with code 0. Renders of projects with Kontakt
-  ended with code 0xC000000D with complete files. Such a render reports `files_ok: true` and `abnormal_exit: true`,
-  and isn't a normal success until the cause is understood.
-- Use `wav32f` at 44.1 kHz in stereo for anything that will be measured, so peaks above 0 dBFS aren't clipped.
-  `render.configure` doesn't set dither, normalization or tails yet, and renders up to `end` with no tail added.
+  waiting for the timeout. The progress window and the countdown of `fx_delay` don't count.
+- It refuses when a target file already exists, since a render writes over it without asking. Pass `--overwrite`
+  only for a file that isn't kept as evidence.
+- Each expected file is checked for presence, format, channels, signal, being newer than the render, and the length
+  the saved bounds and tail imply (or `--seconds`).
+- `ok` is true only when the files check out, the process exited with code 0 and the saved settings match the
+  standard (`--allow-nonstandard` accepts others). Renders of projects with Kontakt ended with code 0xC000000D with
+  complete files. Such a render reports `files_ok: true` and `abnormal_exit: true`, and isn't a normal success until
+  the cause is understood.
+- The record (`out.render.json` next to the file, or `--manifest`) keeps the project hash, the saved settings, the
+  plugins with their binary versions, REAPER's version, the outcome and each file's facts and hash.
 - Repeated renders of the same project can differ, from round robin samples or modulation. Before reading a
   difference between two versions as a change, render one of them a few times and compare with `mps wav compare`,
   which reports the lag, the residual and whether the files are identical.

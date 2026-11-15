@@ -13,9 +13,10 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
-from mps import audio, reaper, render
+from mps import audio, manifest, reaper, render, rpp
 
 CODES = {reaper.OK: 0, reaper.ERROR: 1, reaper.NOT_STARTED: 3, reaper.UNCERTAIN: 4, reaper.EXPIRED: 5}
 BRIDGE = Path(__file__).resolve().parents[2] / "reaper" / "mps_bridge.lua"
@@ -82,18 +83,50 @@ def cmd_start(a):
 
 
 def cmd_render(a):
-    res = render.render_project(a.project, timeout=a.timeout)
+    project = Path(a.project)
+    settings, plugins = rpp.read(project) if project.is_file() else ({}, [])
+    off_standard = render.deviations(settings) if settings else []
+    # without --seconds, the length follows from the saved bounds and tail
+    seconds = a.seconds if a.seconds is not None else render.expected_seconds(settings)
+    # a render writes over its target without asking, which would destroy an earlier render kept as evidence
+    existing = sorted({str(p) for p in [*render.targets(settings), *map(Path, a.expect or [])] if p.exists()})
+    if existing and not a.overwrite:
+        return emit(
+            {"ok": False, "error": "target files exist, pass --overwrite to replace them", "existing": existing}, 1
+        )
+    res = render.render_project(project, timeout=a.timeout)
     checks = []
     for path in a.expect or []:
-        c = audio.check(path, seconds=a.seconds, samplerate=a.samplerate, channels=a.channels, subtype=a.subtype)
+        c = audio.check(path, seconds=seconds, samplerate=a.samplerate, channels=a.channels, subtype=a.subtype)
         if c.get("ok") and Path(path).stat().st_mtime < res.get("started", 0):
             c["ok"], c["failures"] = False, ["file is older than this render"]
+        if Path(path).is_file():
+            c["sha256"] = manifest.sha256_file(path)
         checks.append(c)
     files_ok = all(c["ok"] for c in checks)
     # complete files from a process that crashed on exit are kept apart from a normal render (see render.py)
     abnormal = res.get("returncode", 0) != 0
-    ok = res.get("ok", False) and files_ok and not abnormal
-    return emit({**res, "checks": checks, "files_ok": files_ok, "abnormal_exit": abnormal, "ok": ok}, 0 if ok else 1)
+    standard_ok = not off_standard or a.allow_nonstandard
+    ok = res.get("ok", False) and files_ok and not abnormal and standard_ok
+    record = {
+        **res,
+        "ok": ok,
+        "files_ok": files_ok,
+        "abnormal_exit": abnormal,
+        "standard": {"ok": not off_standard, "deviations": off_standard, "allowed": bool(a.allow_nonstandard)},
+        "checks": checks,
+        "project": {"path": str(project), "sha256": manifest.sha256_file(project) if project.is_file() else None},
+        "settings": settings,
+        "expected_seconds": seconds,
+        "plugins": [{**p, **(manifest.plugin_version(p["file"]) if p["file"] else {})} for p in plugins],
+        "reaper": {"exe": str(render.reaper_exe()), "version": manifest.file_version(render.reaper_exe())},
+        "recorded": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
+    out = a.manifest or (str(Path(a.expect[0]).with_suffix(".render.json")) if a.expect else None)
+    if out:
+        Path(out).write_text(json.dumps(record, indent=1, default=str), encoding="utf-8")
+        record["manifest"] = out
+    return emit(record, 0 if ok else 1)
 
 
 def cmd_wav_info(a):
@@ -134,6 +167,11 @@ def main(argv=None):
     rn.add_argument("--channels", type=int)
     rn.add_argument("--subtype", help="soundfile subtype, such as PCM_24 or FLOAT")
     rn.add_argument("--timeout", type=float, default=600.0)
+    rn.add_argument("--overwrite", action="store_true", help="replace target files that already exist")
+    rn.add_argument("--manifest", help="where to write the render record (default: next to the first expected file)")
+    rn.add_argument(
+        "--allow-nonstandard", action="store_true", help="accept render settings that differ from the standard"
+    )
     rn.set_defaults(fn=cmd_render)
 
     w = sub.add_parser("wav", help="facts about audio files")

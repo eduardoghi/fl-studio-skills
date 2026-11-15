@@ -15,7 +15,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.1.4"
+local VERSION = "0.2.0"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
 if reaper.set_action_options then reaper.set_action_options(1 | 2) end
@@ -191,6 +191,13 @@ local function need(args, key, kind)
   return v
 end
 
+local function opt(args, key, kind)
+  local v = args[key]
+  if v == nil or v == json.null then return nil end
+  if kind and type(v) ~= kind then error("bad_args: '" .. key .. "' must be " .. kind) end
+  return v
+end
+
 local function track_by_guid(guid)
   for i = 0, reaper.CountTracks(0) - 1 do
     local tr = reaper.GetTrack(0, i)
@@ -268,6 +275,10 @@ local RENDER_FORMATS = {
   -- WAV sink settings in base64 ("evaw" followed by the bit depth and options)
   wav16 = "ZXZhdxAAAQ==", wav24 = "ZXZhdxgAAQ==", wav32f = "ZXZhdyAAAQ==",
 }
+-- RENDER_SETTINGS flag (16<<16) that delays the render start by RENDER_DELAY seconds, for FX that load samples
+local RENDER_DELAY_FLAG = 16 << 16
+-- RENDER_NORMALIZE flag (4<<16) that disables all render postprocessing (normalize, limit, fades, trim, pad)
+local RENDER_NO_POSTPROCESSING = 4 << 16
 
 ------------------------------------------------------------------------------------------------------------ commands
 -- mutates = true wraps the command in an undo block
@@ -477,20 +488,31 @@ COMMANDS["render.configure"] = { mutates = true, run = function(a)
   reaper.GetSetProjectInfo_String(0, "RENDER_FILE", need(a, "directory", "string"), true)
   reaper.GetSetProjectInfo_String(0, "RENDER_PATTERN", need(a, "pattern", "string"), true)
   reaper.GetSetProjectInfo_String(0, "RENDER_FORMAT", fmt, true)
-  reaper.GetSetProjectInfo(0, "RENDER_SETTINGS", 0, true)       -- master mix only
+  local tail_ms = opt(a, "tail_ms", "number") or 0
+  local fx_delay = opt(a, "fx_delay", "number") or 0
+  if tail_ms < 0 or fx_delay < 0 then error("bad_args: tail_ms and fx_delay can't be negative") end
+  -- master mix only, plus the documented flag that waits fx_delay seconds for FX to load samples
+  reaper.GetSetProjectInfo(0, "RENDER_SETTINGS", fx_delay > 0 and RENDER_DELAY_FLAG or 0, true)
+  reaper.GetSetProjectInfo(0, "RENDER_DELAY", fx_delay, true)
   reaper.GetSetProjectInfo(0, "RENDER_BOUNDSFLAG", 0, true)      -- custom start and end
   reaper.GetSetProjectInfo(0, "RENDER_STARTPOS", need(a, "start", "number"), true)
   reaper.GetSetProjectInfo(0, "RENDER_ENDPOS", need(a, "end", "number"), true)
   reaper.GetSetProjectInfo(0, "RENDER_SRATE", need(a, "srate", "number"), true)
   reaper.GetSetProjectInfo(0, "RENDER_CHANNELS", need(a, "channels", "number"), true)
-  reaper.GetSetProjectInfo(0, "RENDER_TAILFLAG", 0, true)
+  -- the tail runs past `end` only when asked, so a render's length is always end - start + tail_ms
+  reaper.GetSetProjectInfo(0, "RENDER_TAILFLAG", tail_ms > 0 and 1 or 0, true)
+  reaper.GetSetProjectInfo(0, "RENDER_TAILMS", tail_ms, true)
   reaper.GetSetProjectInfo(0, "RENDER_ADDTOPROJ", 0, true)
+  reaper.GetSetProjectInfo(0, "RENDER_DITHER", 0, true)
+  reaper.GetSetProjectInfo(0, "RENDER_NORMALIZE", RENDER_NO_POSTPROCESSING, true)
   local _, targets = reaper.GetSetProjectInfo_String(0, "RENDER_TARGETS", "", false)
   local _, f = reaper.GetSetProjectInfo_String(0, "RENDER_FORMAT", "", false)
-  return { targets = targets, format = f, start = reaper.GetSetProjectInfo(0, "RENDER_STARTPOS", 0, false),
-           ["end"] = reaper.GetSetProjectInfo(0, "RENDER_ENDPOS", 0, false),
-           srate = reaper.GetSetProjectInfo(0, "RENDER_SRATE", 0, false),
-           channels = reaper.GetSetProjectInfo(0, "RENDER_CHANNELS", 0, false) }
+  local function get(key) return reaper.GetSetProjectInfo(0, key, 0, false) end
+  return { targets = targets, format = f, start = get("RENDER_STARTPOS"), ["end"] = get("RENDER_ENDPOS"),
+           srate = get("RENDER_SRATE"), channels = get("RENDER_CHANNELS"), settings = get("RENDER_SETTINGS"),
+           fx_delay = get("RENDER_DELAY"), tail_flag = get("RENDER_TAILFLAG"), tail_ms = get("RENDER_TAILMS"),
+           dither = get("RENDER_DITHER"), normalize = get("RENDER_NORMALIZE"),
+           project_srate = get("PROJECT_SRATE"), project_srate_use = get("PROJECT_SRATE_USE") }
 end }
 
 ---------------------------------------------------------------------------------------------------------------- loop

@@ -68,7 +68,8 @@ skill explains, and the FL Studio bridge has its own setup in `fl-studio/bridge/
   - `bin/fl-notes` reads and writes the notes of many channels through that bridge, checking each write by reading it
     back.
 - `poc/` holds the proof of concept scripts for REAPER, kept as the evidence for `docs/poc-results.md`.
-- `docs/` holds the investigation behind the move to REAPER, the proof of concept results and the migration notes.
+- `docs/` holds the investigation behind the move to REAPER, the proof of concept results, the render standard and the
+  migration notes.
 
 Windows runs a script by its extension and ignores the `#!` line, so each script in `bin/` has a `.cmd` next to it
 that runs it with `python`. Put `bin\` on `PATH` to run them by name.

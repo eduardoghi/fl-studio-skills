@@ -18,6 +18,9 @@ def info(path: str | Path) -> dict:
     x, _ = sf.read(str(path), dtype="float64", always_2d=True)
     peak = float(np.abs(x).max()) if x.size else 0.0
     rms = float(np.sqrt(np.mean(x**2))) if x.size else 0.0
+    # the level of the last 100 ms says whether the file ends in silence or cuts a sound or a tail short
+    end = x[-max(1, f.samplerate // 10) :]
+    end_rms = float(np.sqrt(np.mean(end**2))) if end.size else 0.0
     return {
         "path": str(path),
         "format": f.format,
@@ -28,6 +31,7 @@ def info(path: str | Path) -> dict:
         "seconds": f.frames / f.samplerate,
         "peak_db": db(peak),
         "rms_db": db(rms),
+        "end_rms_db": db(end_rms),
         "silent": db(peak) < SILENCE_DB,
     }
 
