@@ -81,9 +81,10 @@ Observed with no snapshot loaded:
   below the first five rows can't be reached through the interface.
 - A library loads without a double click through KONTAKT menu > Load recent, which the bridge can click because
   Kontakt draws its menus inside the plugin window. Loading from the Libraries browser needs a double click.
-- The snapshot arrows in the instrument header did nothing with posted clicks, even after hovering, so factory
-  snapshots can't be stepped through from the bridge. The snapshot files are obfuscated, so their settings can't be
-  read from disk either. The tone modules are all parameters, so a sound can be built without them.
+- The snapshot arrows in the instrument header did nothing with posted clicks, even with real mouse input before a
+  snapshot was loaded, and the snapshot files are obfuscated. A snapshot loads by its file instead, through
+  KONTAKT menu > Load (see `kontakt.md`), and then shows in the header. Reading the parameters after the load tells
+  which modules the snapshot turned on.
 - The gear icon at the left of the instrument header opens Instrument Options, a modal dialog that blocks FL and the
   bridge until it is closed (WM_CLOSE on its window cancels it).
 - Cloning the channel (channel menu > Clone) copies the instrument with all its settings into a new channel right

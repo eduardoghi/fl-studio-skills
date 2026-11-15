@@ -178,7 +178,9 @@ and Ctrl+R both worked sent to the piano roll, and Ctrl+Alt+Y did nothing sent t
 - Native Instruments plugins draw with Qt (`Qt6...QWindowIcon` windows). Guitar Rig 7 ignored posted clicks on its
   preset list, and Kontakt 8 ignored them on the snapshot arrows, with FL in front and the pointer moved over the
   button first. Check a plugin's answer to a posted click by reading its parameters back before planning on its
-  interface, and prefer parameters the host can set.
+  interface, and prefer parameters the host can set. Look for a file route too. A Kontakt snapshot loads through
+  the KONTAKT menu's Load dialog, a standard Windows dialog filled with `WM_SETTEXT`, while Guitar Rig's presets
+  needed a real double click.
 - A click on a plugin icon can open a modal dialog, as Kontakt's Instrument Options, which blocks FL's message loop.
   Every bridge call then waits until it times out. List FL's top-level windows to find the dialog (`#32770`) and post
   `WM_CLOSE` to it to cancel.

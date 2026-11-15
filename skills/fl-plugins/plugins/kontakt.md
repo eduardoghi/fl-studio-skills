@@ -23,6 +23,11 @@ render from it wasn't tested.
 
 Spitfire libraries show a help bubble on first load. It covers the controls, and a click dismisses it.
 
+The same dialog accepts a snapshot (`.nksn`, in the library's `Snapshots` folder). Loaded this way it replaced the
+settings of the instrument already in the rack, without adding a second one, and the header showed its name. The
+KONTAKT menu and its Load row answered posted clicks, and the dialog is a standard Windows one, so a snapshot loads
+without real mouse input, by setting the path in its file name field and clicking its Open button.
+
 ## Controlling it
 
 An instrument's own controls appear as parameters in the order of its panels, without the panel name, so names like
@@ -30,7 +35,7 @@ An instrument's own controls appear as parameters in the order of its panels, wi
 after a set, so read the text again after about 150 ms (`plugins/evolution.md` has a measured case).
 
 Kontakt draws its window with Qt. Its menus and some buttons answered posted clicks, but the snapshot arrows of an
-instrument header didn't, even with the pointer moved over them first.
+instrument header didn't, even with the pointer moved over them first. Load snapshots by file instead.
 
 The Kontakt instance reports through the bridge like any VST. Pass
 `named_only=False` to `fl_plugin_params` to see the `MIDI CC #` entries FL adds, which are the place to start when an

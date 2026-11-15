@@ -21,7 +21,7 @@ Read only the file of the plugin in use:
 | EZbass | `plugins/ezbass.md` | sounds an octave under the note written, keyswitch map, slides at a fixed speed, overlaps play legato, FL can load an old VST2 build |
 | Evolution (Orange Tree) | `plugins/evolution.md` | Overlapping notes a tone apart become legato, even on different strings |
 | Kontakt 8 | `plugins/kontakt.md` | Libraries are in Classic View, and `DEMO` marks an unregistered library |
-| Guitar Rig 7 | `plugins/guitar-rig-7.md` | Exposes only macros until a preset loads, and its window ignores posted clicks |
+| Guitar Rig 7 | `plugins/guitar-rig-7.md` | Exposes its components only after a preset loads, which takes a real double click |
 
 Each file says where its facts come from. "Manual" means the maker's documentation, in our own words. "Observed" means
 FL Studio 26.1.4 or 26.1.7 on one machine, as each file states. The values are what one guitar track used, so they are starting points to measure and
