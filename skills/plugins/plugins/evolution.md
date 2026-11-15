@@ -110,4 +110,18 @@ Observed in REAPER 7.86:
   at the second note). On two channels the same pair was picked (23.3 dB), like the pair without overlap (25.8 dB).
   Legato stays within a string.
 - 8 of 9 renders of the same part were sample-identical, and one differed on some notes, likely a round robin. Measure
-  this variation before reading a small difference between two renders as a change.
+  this variation before reading a small difference between two renders as a change. On a denser part of 110 notes, no
+  two of four renders matched.
+- Which string plays a note changes the brightness of the whole part. On one riff, a fingering model that charged 1 per
+  fret of hand movement and only 0.1 per fret of height kept the hand at frets 7 to 16 and put a fifth of the notes on
+  the low E string. The spectral centroid was 455 Hz, against 793 Hz when the engine chose the strings itself. Making a
+  position change cost more than small moves and charging 0.5 per fret of height, still within a four-fret hand, raised
+  it to 553 Hz. Check the string and fret distribution of a fingering before blaming the tone.
+- With all notes on channel 1, the engine played that riff mostly in low position, on the B string at frets 0 to 6
+  (estimated from the harmonic profile of 21 notes, see the `audio-verification` skill).
+
+Manual, from the Evolution Rock Standard user's guide (same engine, not yet confirmed on Indie Rock). Samples come in
+three dynamics, down and up strokes and two round robins each, with every string recorded on its own. The SETUP list
+has a pick style (Alternate, which goes back to a downstroke after a release gate time, Economy, and 8th and 16th note,
+which play downbeats down and upbeats up), Pick Noise Amount, Release Volume, Legato Volume and the legato ranges, and
+a fretting position that steers the automatic string choice.

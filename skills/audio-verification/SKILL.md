@@ -248,6 +248,27 @@ These checks come from one mix with a stereo processed guitar, a residual "other
   them offline. Subtracting an earlier render fails when the instrument isn't sample-identical between renders, as
   with round robin samples or modulated effects.
 
+## Which string played a note
+
+The same pitch on different guitar strings has a different pattern of harmonics, which can suggest the string a
+recording used. It worked as a suggestion with confidence, never as a certainty.
+
+1. Render a calibration with the instrument that will play the part, with each pitch of the part alone on every string
+   that reaches it, twice.
+2. Take each note's profile as the level of harmonics 2 to 8 relative to the fundamental, from 40 to 250 ms after the
+   attack, so the pick transient stays out.
+3. Compare profiles after removing a straight-line tilt over log2 of the harmonic number, which is what a broad EQ, a
+   pickup or a clean amplifier changes. Leave out harmonics within 3% of a partial of another note sounding at the
+   same time, and skip notes with fewer than four left.
+4. Keep only suggestions whose best string is clearly ahead of the second, and let the fingering's physical
+   constraints overrule them.
+
+Measured on one sampled guitar. Each calibration repeat classified by the others was right for 73 of 74 notes. On a
+render with known strings, notes whose second-best distance was at least twice the best were right for 20 of 20 dry
+and 19 of 21 after synthetic high cut, saturation and reverb, while all notes together were right for 71 to 75%. A
+real recording can hold processing or layered takes that this test doesn't cover, and in a dense part few notes start
+alone, so expect suggestions for a minority of notes.
+
 ## Velocities from a reference
 
 To copy the dynamics of a recorded part onto a virtual instrument, measure how the instrument answers velocity
