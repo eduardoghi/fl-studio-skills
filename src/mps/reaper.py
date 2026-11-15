@@ -135,7 +135,8 @@ def call(
 
 
 def _take(res: Path) -> dict:
-    body = json.loads(res.read_text(encoding="utf-8"))
+    # REAPER's strings are UTF-8, but a plugin can report bytes that aren't, which mustn't lose the whole answer
+    body = json.loads(res.read_text(encoding="utf-8", errors="replace"))
     res.unlink()
     return body
 

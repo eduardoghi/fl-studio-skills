@@ -15,7 +15,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.0"
+local VERSION = "0.2.1"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
 if reaper.set_action_options then reaper.set_action_options(1 | 2) end
@@ -545,7 +545,13 @@ local function respond(id, body)
   body.id = id
   body.instance = IID
   body.finished = os.time()
-  publish(D.res, id .. ".json", json.encode(body), D.tmp)
+  -- a result the encoder can't take still gets an answer, instead of an error that would stop the bridge
+  local ok, text = pcall(json.encode, body)
+  if not ok then
+    text = json.encode({ id = id, instance = IID, finished = body.finished, status = "error",
+                         error = "bad_response: " .. tostring(text), changed = body.changed })
+  end
+  publish(D.res, id .. ".json", text, D.tmp)
 end
 
 local function handle(name)
@@ -555,8 +561,11 @@ local function handle(name)
   if not os.rename(D.req .. SEP .. name, D.work .. SEP .. name) then return end
   local raw = read_file(D.work .. SEP .. name)
   local okp, req = pcall(json.decode, raw or "")
-  if not okp or type(req) ~= "table" then
-    respond(id, { status = "error", error = "bad_request: " .. tostring(req) })
+  local args = okp and type(req) == "table" and req.args
+  if not okp or type(req) ~= "table" or getmetatable(req) == json.array_mt
+     or (args ~= nil and (type(args) ~= "table" or getmetatable(args) == json.array_mt)) then
+    local why = okp and "the request and its args must be JSON objects" or tostring(req):gsub("^.-%.lua:%d+: ", "")
+    respond(id, { status = "error", error = "bad_request: " .. why })
     os.remove(D.work .. SEP .. name)
     return
   end
@@ -622,7 +631,17 @@ local function loop()
     k = k + 1
   end
   table.sort(names)
-  for _, n in ipairs(names) do handle(n) end
+  for _, n in ipairs(names) do
+    -- an error outside a command (a malformed field, a full disk) answers that request and keeps the bridge running
+    local ok, err = pcall(handle, n)
+    if not ok then
+      local id = n:match("^(.+)%.json$")
+      if id then
+        pcall(respond, id, { status = "error", error = "bridge: " .. tostring(err):gsub("^.-%.lua:%d+: ", "") })
+      end
+      os.remove(D.work .. SEP .. n)
+    end
+  end
   reaper.defer(loop)
 end
 

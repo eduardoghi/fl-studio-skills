@@ -161,3 +161,28 @@ def test_unclaimed_request_to_a_hung_bridge_is_withdrawn_early(instance, monkeyp
     t0 = time.monotonic()
     res = reaper.call("track.add", timeout=5)
     assert res["status"] == reaper.NOT_STARTED and time.monotonic() - t0 < 2
+
+
+def test_response_with_invalid_utf8_is_still_read(instance):
+    stop = threading.Event()
+
+    def bridge_bad_bytes():
+        while not stop.is_set():
+            for name in os.listdir(instance / "req"):
+                os.rename(instance / "req" / name, instance / "work" / name)
+                req = json.loads((instance / "work" / name).read_text())
+                body = b'{"id": "' + req["id"].encode() + b'", "status": "ok", "result": {"name": "Amp \xe9"}}'
+                (instance / "tmp" / "x").write_bytes(body)
+                os.rename(instance / "tmp" / "x", instance / "res" / name)
+                (instance / "work" / name).unlink()
+            (instance / "heartbeat").write_text(str(time.time()))
+            time.sleep(0.01)
+
+    t = threading.Thread(target=bridge_bad_bytes)
+    t.start()
+    try:
+        res = reaper.call("fx.params", timeout=2)
+    finally:
+        stop.set()
+        t.join()
+    assert res["status"] == reaper.OK and res["result"]["name"].startswith("Amp ")
