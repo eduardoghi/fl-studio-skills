@@ -120,7 +120,26 @@ Observed in REAPER 7.86:
 - With all notes on channel 1, the engine played that riff mostly in low position, on the B string at frets 0 to 6
   (estimated from the harmonic profile of 21 notes, see the `audio-verification` skill).
 
-Manual, from the Evolution Rock Standard user's guide (same engine, not yet confirmed on Indie Rock). Samples come in
+## Articulations
+
+Observed on Indie Rock in REAPER 7.86.
+
+- The PLAY page lists SUSTAIN (mapped to velocity 1 to 127), PALM MUTE, MUTE, HARMONICS and SQUEAL, the last four
+  unmapped in the initial state. Each takes Velocity, Keyswitch, Latching Keyswitch, Sustain Pedal, Soft Pedal, Random
+  or Controller #n from a menu at its row. Choosing Keyswitch assigned the next free low key, C#1 (MIDI 37) for the
+  first and C1 (36) for the second, in Kontakt's naming where C3 is 60. Save the state afterwards, since none of this
+  is a host parameter.
+- A keyswitch acts on the whole instance, sent on the note's channel or on channel 1, so with Channel-Based Strings a
+  part that needs an articulation and a part that doesn't need separate instances.
+- On F#3 at velocity 100, a plain note fell 20 dB in about 1 s. Palm mute fell 20 dB in 290 ms and moved the spectral
+  centroid from about 415 to 195 Hz, still clearly pitched. Mute (a dead note) fell 20 dB in 30 ms with the harmonic
+  share 12 to 23 dB lower, nearly unpitched. Treat them as different articulations.
+- Keyswitches held only around each note-on (from 20 ms before to 50 ms after) were enough. A part of 57 notes played
+  that way rendered with its centroid at 449 Hz against 647 Hz without the keyswitch, and much shorter notes.
+- The default pick style on the SETUP page is Economy Picking.
+
+Manual, from the Evolution Rock Standard user's guide (same engine). The pick styles below were confirmed on Indie
+Rock only as far as the default shown. Samples come in
 three dynamics, down and up strokes and two round robins each, with every string recorded on its own. The SETUP list
 has a pick style (Alternate, which goes back to a downstroke after a release gate time, Economy, and 8th and 16th note,
 which play downbeats down and upbeats up), Pick Noise Amount, Release Volume, Legato Volume and the legato ranges, and
