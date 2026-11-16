@@ -44,7 +44,8 @@ Every call prints JSON and exits with a code that says what happened.
 - Pass `--expect-project <path.rpp>` to any command that changes a project, so it is refused if another tab is in
   front.
 - Each changing command is one undo step, and its answer says whether the project changed.
-- With several REAPER instances open, pass `--instance`. `mps reaper instances` lists them with their heartbeat.
+- With several REAPER instances open, pass `--instance`. `mps reaper instances` lists them with their heartbeat. A
+  script that calls `mps.reaper.call` directly is pinned to one with the environment variable `MPS_REAPER_INSTANCE`.
 - Use `--args-file` for large arguments such as plugin states, which reach 2 MB.
 
 ## Commands

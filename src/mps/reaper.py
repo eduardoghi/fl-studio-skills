@@ -71,6 +71,8 @@ def list_instances() -> list[Instance]:
 
 
 def find_instance(instance_id: str | None = None) -> Instance:
+    # a script that calls the client directly can be pinned to one instance while another REAPER is open
+    instance_id = instance_id or os.environ.get("MPS_REAPER_INSTANCE") or None
     live = [i for i in list_instances() if i.alive]
     if instance_id:
         match = [i for i in live if i.id == instance_id]

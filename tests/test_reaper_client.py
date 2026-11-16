@@ -121,6 +121,18 @@ def test_several_live_instances_need_a_choice(instance, tmp_path):
     assert reaper.find_instance("def").id == "def"
 
 
+def test_environment_picks_the_instance(instance, tmp_path, monkeypatch):
+    other = tmp_path / "mps" / "instances" / "def"
+    for sub in ("req", "work", "res", "tmp"):
+        (other / sub).mkdir(parents=True)
+    (other / "info.json").write_text("{}")
+    (other / "heartbeat").write_text("1")
+    (instance / "heartbeat").write_text("1")
+    monkeypatch.setenv("MPS_REAPER_INSTANCE", "def")
+    assert reaper.find_instance().id == "def"
+    assert reaper.find_instance(instance.name).id == instance.name
+
+
 def test_claimed_command_outliving_the_heartbeat_still_returns(instance, monkeypatch):
     # the real bridge can't beat while a command runs, so the beat stops once the request is claimed
     monkeypatch.setattr(reaper, "HEARTBEAT_MAX_AGE", 0.1)
