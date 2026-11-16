@@ -15,7 +15,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.2"
+local VERSION = "0.2.3"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
 if reaper.set_action_options then reaper.set_action_options(1 | 2) end
@@ -578,6 +578,15 @@ local function handle(name)
   -- claim it. A failed rename means something else took the request, or the client withdrew it
   if not os.rename(D.req .. SEP .. name, D.work .. SEP .. name) then return end
   local raw = read_file(D.work .. SEP .. name)
+  -- another process (an antivirus scanning the new file, it seems) sometimes held a just-claimed request for a moment,
+  -- and the failed open was answered as an empty, malformed request, so the open is retried for up to a second
+  local tries = 0
+  while raw == nil and tries < 50 do
+    local t = os.clock()
+    while os.clock() - t < 0.02 do end
+    raw = read_file(D.work .. SEP .. name)
+    tries = tries + 1
+  end
   local okp, req = pcall(json.decode, raw or "")
   local args = okp and type(req) == "table" and req.args
   if not okp or type(req) ~= "table" or getmetatable(req) == json.array_mt
