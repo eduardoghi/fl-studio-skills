@@ -30,3 +30,5 @@ Observed with Guitar Rig 7.0.2 as a VST3 effect in REAPER 7.86.
   without opening the plugin. `So Near So Far` uses the AC Box XV, and `Basic Twang Reverb` the Twang Reverb.
 - After a preset loaded, `Metronome On/Off` read `On`. Turn it off before rendering.
 - Two renders of the same chain on the same audio weren't identical, with a residual about 44 dB down.
+- The `Basic Twang Reverb` preset summed a doubled stereo input to nearly mono (left-right correlation 0.19 in, 0.87
+  out). Make the width after Guitar Rig.

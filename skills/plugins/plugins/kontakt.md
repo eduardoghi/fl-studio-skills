@@ -49,6 +49,13 @@ Observed in REAPER 7.86, with Evolution Indie Rock loaded:
 
 - The KONTAKT menu ignored a posted click there, unlike in FL, and opened with a real click. Its Load row then took a
   posted click, and the file dialog took the `.nki` path without the mouse, as in FL.
+- On a later day the real click opened the menu only after the pointer had moved over the header for a moment.
+  Posted mouse moves before a posted click, sent messages with activation and a posted press alone still didn't open
+  it. UI Automation lists the header button as `Kontakt File Menu` with an Invoke pattern, but invoking it didn't lead
+  to a Load dialog.
+- Real input needs an unlocked Windows session. While it was locked there was no input desktop, and a screen capture
+  returned the lock screen. Wait for the person to be idle for a few seconds before each real click, since they may
+  be using the mouse, and check that the pointer landed where it should.
 - A saved state (`vst_chunk`) restored exactly, by render, both written into a new instance (`mps state restore
   --fresh`) and written into the running one, including a different state of the same library. That was Evolution
   Indie Rock, and other libraries weren't tested. The fresh instance stays the default. An earlier note said the

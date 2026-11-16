@@ -12,3 +12,10 @@ Observed in REAPER 7.86 on a sampled clean guitar DI, measured over one bar. The
 - The `Clean` amp with its cabinet was darker still, with 69% below 300 Hz.
 - A spectral centroid close to a reference hid that scoop, since lows and highs averaged out. Compare band shares.
 - The amp brought the crest factor from about 20 dB on the DI to about 13 dB.
+- With the amp and cabinet sections on, a doubled stereo DI (left-right correlation 0.19) came out nearly mono (0.91)
+  with the `Clean` amp, so a doubling made before the plugin is lost. Make the width after it.
+- With every section off except `Doubler Active`, the output had a left-right correlation near 0, and the attacks of
+  the two sides were about 9 ms apart (`Doubler Spread` 6.00 ms, the default).
+- REAPER crashed twice (access violation in ntdll) when a new project tab was opened right after a tab holding this
+  plugin or Archetype Tim Henson X was closed. Keep a long batch resumable and restart REAPER when the bridge goes
+  quiet. The cause wasn't isolated further.

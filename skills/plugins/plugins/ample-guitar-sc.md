@@ -63,3 +63,19 @@ Distorted part on 57 Delight with Predrive on, `AMP-57D-Gain` 10, the Mid+Bridge
 Observed in REAPER 7.86 (version 4.0.1) on four notes rendered in a new process. With no load delay the file
 was pure silence in both runs, and with `fx_delay` 5 the notes sounded. Give the project a load delay
 (`docs/render-standard.md`).
+
+## Raw signal, open strings and doubling
+
+Observed in REAPER 7.86 on Ample Guitar SC, and on LP, RB, SH, TC and WF where it says so, with one riff of about 70
+notes rendered from MIDI.
+
+- The raw guitar comes out with `AMP-Enabled` off. With the amp on, only the cabinet microphones and room reach the
+  output, so setting their gains to 0 to keep the `DI` gain gave pure silence (SC, LP, RB, SH and WF; TC starts with
+  the amp off). With the amp off, the cabinet gains made no difference.
+- The raw signal differed a lot between the six. SH and WF had almost nothing above 1.2 kHz, which no EQ brings back.
+- `Open Str First` on followed a clean reference riff more closely than letting the instrument choose the strings, on
+  SC, RB, TC and LP alike, measured with the band balance matched first.
+- `Auto Legato` at 1 or 2 turned overlapping notes into slides or legato and followed the reference less than 0.
+- `M-Doubling Tog` adds a second take panned apart. `M-Doubling Wid` runs from 10 to 50. At the default 15 the
+  left-right correlation was about 0.19, with the attacks of the two sides about 14 ms apart. At 10 it went negative
+  (-0.18). The mono sum of a doubled part smears its notes, so judge doubling in mono too.
