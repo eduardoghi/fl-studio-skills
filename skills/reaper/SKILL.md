@@ -60,6 +60,7 @@ Every call prints JSON and exits with a code that says what happened.
 | `project.set_tempo` | `bpm`, `srate` (optional) | the values read back |
 | `track.add` | `name`, `index` (optional) | the track with its GUID |
 | `item.add_midi` | `track`, `start_qn`, `end_qn` | the item's GUID |
+| `item.add_audio` | `track`, `path`, `position` (seconds) | the item's GUID and length, for re-amping a rendered DI through effect chains |
 | `midi.write` | `item`, `notes`, `ccs`, `replace` | every note and event read back |
 | `midi.read` | `item` | notes and events |
 | `fx.add` | `track`, `name`, `position` (optional) | the effect's index, GUID and name |

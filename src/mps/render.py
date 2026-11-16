@@ -71,9 +71,10 @@ def expected_seconds(settings: dict) -> float | None:
     return settings["end"] - settings["start"] + tail
 
 
-# Dialogs a normal render shows, which must not count as failures. The render's progress window, and the countdown
-# REAPER shows when a project asks to wait for FX to load samples before rendering (RENDER_DELAY).
-PROGRESS_DIALOGS = ("Rendering to file", "Render Queue Delay")
+# Dialogs a normal render shows, which must not count as failures. The render's progress window, the countdown
+# REAPER shows when a project asks to wait for FX to load samples before rendering (RENDER_DELAY), and the progress of
+# building peak files for audio items whose files are new (as a DI rendered just before re-amping it).
+PROGRESS_DIALOGS = ("Rendering to file", "Render Queue Delay", "Building Peaks")
 
 
 def reaper_exe() -> Path:

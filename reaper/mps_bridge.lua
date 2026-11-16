@@ -15,7 +15,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.1"
+local VERSION = "0.2.2"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
 if reaper.set_action_options then reaper.set_action_options(1 | 2) end
@@ -381,6 +381,24 @@ COMMANDS["item.add_midi"] = { mutates = true, run = function(a)
   local _, g = reaper.GetSetMediaItemInfo_String(it, "GUID", "", false)
   return { guid = g, position = reaper.GetMediaItemInfo_Value(it, "D_POSITION"),
            length = reaper.GetMediaItemInfo_Value(it, "D_LENGTH") }
+end }
+
+-- an audio file as an item, for re-amping a rendered DI through effect chains
+COMMANDS["item.add_audio"] = { mutates = true, run = function(a)
+  local tr = track_by_guid(need(a, "track", "string"))
+  local path = need(a, "path", "string")
+  if not reaper.file_exists(path) then error("not_found: " .. path) end
+  local src = reaper.PCM_Source_CreateFromFile(path)
+  if not src then error("failed: PCM_Source_CreateFromFile") end
+  local len = reaper.GetMediaSourceLength(src)
+  local it = reaper.AddMediaItemToTrack(tr)
+  local take = reaper.AddTakeToMediaItem(it)
+  reaper.SetMediaItemTake_Source(take, src)
+  reaper.SetMediaItemInfo_Value(it, "D_POSITION", need(a, "position", "number"))
+  reaper.SetMediaItemInfo_Value(it, "D_LENGTH", len)
+  reaper.UpdateItemInProject(it)
+  local _, g = reaper.GetSetMediaItemInfo_String(it, "GUID", "", false)
+  return { guid = g, position = reaper.GetMediaItemInfo_Value(it, "D_POSITION"), length = len }
 end }
 
 COMMANDS["midi.write"] = { mutates = true, run = function(a)
