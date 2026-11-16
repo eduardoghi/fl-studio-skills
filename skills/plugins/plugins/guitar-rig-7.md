@@ -17,3 +17,16 @@ Observed on Guitar Rig 7 Pro as a VST3 effect in FL Studio 26.1.7. The manual wa
   didn't come up by name.
 - Real mouse and key input take the focus and move the person's pointer, so use them only with their permission and
   return the pointer afterwards.
+
+## In REAPER
+
+Observed with Guitar Rig 7.0.2 as a VST3 effect in REAPER 7.86.
+
+- The window still ignored posted clicks. A real click in the search box, typing the name with real Unicode key input,
+  and a real double click on the result loaded a preset. Save the whole state afterwards (`mps state save`) and write
+  it into later instances, so the clicks happen once per preset.
+- Each factory rack preset (`Rack Presets\*.ngrr`, 1392 files here) starts with readable XML naming its amplifiers,
+  characters and genres, for example `RP://Amplifiers` then a tab and `AC Box XV`. Reading it finds presets by amp
+  without opening the plugin. `So Near So Far` uses the AC Box XV, and `Basic Twang Reverb` the Twang Reverb.
+- After a preset loaded, `Metronome On/Off` read `On`. Turn it off before rendering.
+- Two renders of the same chain on the same audio weren't identical, with a residual about 44 dB down.
