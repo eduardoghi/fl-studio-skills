@@ -186,3 +186,20 @@ def test_response_with_invalid_utf8_is_still_read(instance):
         stop.set()
         t.join()
     assert res["status"] == reaper.OK and res["result"]["name"].startswith("Amp ")
+
+
+def test_response_held_by_another_process_is_read_on_retry(tmp_path, monkeypatch):
+    res = tmp_path / "r.json"
+    res.write_text(json.dumps({"status": "ok"}))
+    real = type(res).read_text
+    calls = {"n": 0}
+
+    def flaky(self, *a, **kw):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise PermissionError("in use")
+        return real(self, *a, **kw)
+
+    monkeypatch.setattr(type(res), "read_text", flaky)
+    assert reaper._take(res, wait=0)["status"] == "ok"
+    assert calls["n"] == 3 and not res.exists()

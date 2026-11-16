@@ -134,11 +134,20 @@ def call(
     return {"id": rid, "status": UNCERTAIN, "error": _why(inst, f"the command {where}; its effect is unknown")}
 
 
-def _take(res: Path) -> dict:
-    # REAPER's strings are UTF-8, but a plugin can report bytes that aren't, which mustn't lose the whole answer
-    body = json.loads(res.read_text(encoding="utf-8", errors="replace"))
-    res.unlink()
-    return body
+def _take(res: Path, attempts: int = 50, wait: float = 0.02) -> dict:
+    # Another process (an antivirus scanning the new file, it seems) sometimes held a just-published response for a
+    # moment, and reading it raised PermissionError, so the read is retried for up to a second.
+    for k in range(attempts):
+        try:
+            # REAPER's strings are UTF-8, but a plugin can report bytes that aren't, which mustn't lose the answer
+            body = json.loads(res.read_text(encoding="utf-8", errors="replace"))
+            res.unlink()
+            return body
+        except PermissionError:
+            if k == attempts - 1:
+                raise
+            time.sleep(wait)
+    raise AssertionError("unreachable")
 
 
 def _why(inst: Instance, what: str) -> str:
