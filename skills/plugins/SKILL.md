@@ -23,6 +23,7 @@ Read only the file of the plugin in use:
 | Kontakt 8 | `plugins/kontakt.md` | Its state bytes change on every read, so compare states by render |
 | Guitar Rig 7 | `plugins/guitar-rig-7.md` | Exposes its components only after a preset loads, which takes a real double click |
 | Archetype Cory Wong X | `plugins/archetype-cory-wong-x.md` | Its default amp and cabinet scoop the mids while the centroid looks right |
+| PRISM (Aurally Sound) | `plugins/prism.md` | Every window shows one shared ARA document, so pick the track first |
 
 Each file says where its facts come from. "Manual" means the maker's documentation, in our own words. "Observed"
 means a measurement on one machine, in FL Studio 26.1.4 or 26.1.7 or in REAPER 7.86, as each file states. A behavior
