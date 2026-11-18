@@ -57,6 +57,37 @@ Measured on notes 47, 54 and 59 with instrument-calibrate, three hits per veloci
 - Timing an attack as the rise out of the dip in the low-band envelope put it 0 ms after the note-on for an isolated
   hit and 7.7 ms after it among other notes, where the previous note's release fills the dip.
 
+## Tone controls
+
+Measured in REAPER on EZbass Vintage with `Clean DI`, on the same notes, as band energy after matching the RMS:
+
+- `Tone` lowered only the top. At 40 % the 1 to 4 kHz band fell 3 to 4 dB and nothing below 1 kHz moved.
+- Turning `Bridge` down to 30 % or to 0 (neck pickup only) raised 300 to 1000 Hz by 6 to 7 dB, so for a darker bass
+  keep both pickups and use `Tone` and an EQ after.
+- `Sub-Bass Level` at 30 % changed 20 to 80 Hz by under 1 dB.
+- A render of the same notes in FL Studio and in REAPER gave the same band profile within 1.3 dB.
+
+## Audio Tracker in the standalone
+
+Observed in the standalone `EZbass.exe` 1.3.4, which has the same tracker as the plugin and no host in the way.
+
+- Under the `Audio Tracker` tab, `Select Audio File` opens a small menu whose `Open...` brings a standard Windows
+  dialog. Its file name edit (ID 1148) took the path by `EM_SETSEL` and `EM_REPLACESEL`, so no file drag is needed.
+- A `Tracker Session Setup` window follows, with `Bass Audio to MIDI` selected, the tempo and four switches for extra
+  articulations (percussive mute, grace note, slide and ghost note), all on. The tempo field kept only the integer
+  part. Note times in seconds don't depend on it, because the exported file carries the same tempo.
+- The tracker came out with `Quantize 0`, so the notes keep the times detected.
+- The `File` menu has no MIDI export. The way out is dragging the small MIDI handle beside `Add MIDI to Song Track`.
+  A real left-button drag from that handle to a folder window in Explorer wrote `Untitled.mid`.
+- A saved project (`.ezbp`) is plain text. Its `MidiEvents` block lists the song track as triples of a packed
+  integer and the start and end in beats, where the integer is velocity × 65536 + note × 256 + status (6633104 is
+  0x653690, a note-on of note 54 at velocity 101).
+- The notes are written for EZbass, an octave above the pitch heard.
+- Slides were written as fast chromatic staircases of short notes (about 35 ms each), marked by notes 17 (down) and
+  19 (up) under the keyswitch range, plus some holds of the slide key 30. Notes 17 and 19 aren't in the keyswitch
+  PDF.
+- On a bass line with many repeated notes of one pitch, it joined about half of the repeats into long notes.
+
 ## Rendering in REAPER
 
 Observed in REAPER 7.86 (VST3 and VST2 builds of 1.3.4) on four notes rendered in a new process. With no load delay the file

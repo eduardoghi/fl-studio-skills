@@ -30,3 +30,12 @@ official documentation is at docs.aurallysound.com/prism.
   `EM_REPLACESEL`, reading it back, and only then pressing `Save`. Check the name before saving every time.
 - The file had 960 ticks per quarter note, the project's tempo and time signature, and note times counted from the
   start of the audio item, not of the project.
+
+## What the general algorithm gave on a bass
+
+On a separated bass stem of two minutes with mostly repeated eighth notes:
+
+- It found 280 notes and split repeated notes of one pitch about as often as an envelope-based segmenter did (77 % of
+  the attacks within 50 ms).
+- It read 13 notes a semitone low (F2 and G2 where three pitch trackers, Melodyne and the EZbass tracker all read F#2
+  and G#2). Check its pitches against another tracker before using them.

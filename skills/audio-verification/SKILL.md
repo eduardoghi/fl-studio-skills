@@ -152,6 +152,20 @@ what to check, not as thresholds for another recording.
   - a rest is a fall in level, while a short event glued to the end of a note and followed by silence is usually the
     note being muted, sometimes together with a drum hit leaking into the stem
   - an event with no pitch and much brighter than the notes is usually leakage from another part
+- A kick leaking into a separated bass stem can pass for a repeated note, since it brings a short dip and some top
+  end with no pitch change. Test doubtful repeats three ways:
+  - see whether other transcribers start a note there;
+  - measure the drum stem's low band at the same instant;
+  - compare the shape of the dip and rise with a render that does re-pluck there and with one that holds the note.
+
+  On one stem, 45 of 235 repeats had no support from PRISM, Melodyne or the EZbass tracker. At those points the drum
+  stem rose 3.7 dB (1.0 dB at the confirmed repeats). The stem dipped 3.4 dB and rose 2.0, a re-plucked render dipped
+  8.5 and rose 6.0, and a held note dipped 5.2 and rose 2.6. Holding was closer, so they were removed as leakage.
+- Commercial transcribers are a check, not a source of truth. On that bass, none added a note the segmentation had
+  missed. Melodyne Melodic and the EZbass Audio Tracker joined repeated notes into long ones, and PRISM read 13 notes
+  a semitone low. Count matched attacks, pitches on the matched notes and repeats kept, and render every candidate on
+  the same instrument before judging by ear (`plugins/melodyne.md`, `plugins/ezbass.md` and `plugins/prism.md` in
+  the plugins skill have the export steps).
 - When the instrument used for the rebuild has articulations (keyswitches for slides, legato on overlapping notes),
   probe what each one actually does in a render before relying on it, and keep notes that should be plucked from
   overlapping by accident.
