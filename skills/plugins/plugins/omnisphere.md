@@ -38,3 +38,16 @@ aren't among them, so those stay on the panel. `fl_plugin_set` wasn't tried on i
 preset tools.
 
 A new instance feeds the Master, so point its channel at its own insert before adding effects.
+
+## In REAPER
+
+Observed on 3.0.2c (VST3) in REAPER 7.86 with real mouse input, which moves the user's pointer, so ask first.
+
+- A new instance opened on the about page. A click on the Spectrasonics logo brought back the main page.
+- DIRECTORY and CATEGORY open Windows popup menus. A real click opens them, and the item takes a real click at its
+  screen position as long as the plugin window isn't activated again first, because activating it closes the
+  popup. A submenu opens when the pointer rests on its row, and the pointer has to slide right along that row to
+  reach it.
+- A real click on a row of the list loads the patch. Its full state, read with `fx.state_get` once two reads in a row
+  match, rendered later with that patch in a new instance, so a screening can collect states first and render them
+  in a batch. With a load delay (`fx_delay`) of 20 s, none of 25 such renders came out silent.
