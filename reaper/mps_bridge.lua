@@ -15,7 +15,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.5"
+local VERSION = "0.2.6"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
 if reaper.set_action_options then reaper.set_action_options(1 | 2) end
@@ -499,15 +499,40 @@ end }
 
 -- points of a track's volume envelope (values in dB) or of an effect parameter's envelope (normalized values),
 -- replacing the points already there, read back after sorting
+local function finite(v) return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge end
+
 COMMANDS["envelope.set"] = { mutates = true, run = function(a)
+  -- everything is checked before the first change, so a bad request leaves the envelope as it was
   local tr = track_by_guid(need(a, "track", "string"))
   local points = need(a, "points", "table")
-  local env, volume
-  if a.fx ~= nil and a.fx ~= json.null then
-    env = reaper.GetFXEnvelope(tr, fx_index(tr, a), need(a, "param", "number"), true)
+  local volume = a.fx == nil or a.fx == json.null
+  local fxi, param
+  if not volume then
+    fxi = fx_index(tr, a)
+    param = need(a, "param", "number")
+    if param ~= math.floor(param) or param < 0 or param >= reaper.TrackFX_GetNumParams(tr, fxi) then
+      error("bad_args: 'param' is not a parameter of this effect")
+    end
+  end
+  for k, p in ipairs(points) do
+    if type(p) ~= "table" then error("bad_args: point " .. k .. " is not an object") end
+    if not finite(p.time) or p.time < 0 then error("bad_args: point " .. k .. " needs a finite time of 0 or more") end
+    if not finite(p.value) then error("bad_args: point " .. k .. " needs a finite value") end
+    if volume and (p.value < -150 or p.value > 6) then error("bad_args: point " .. k .. " volume must be -150 to +6 dB") end
+    if not volume and (p.value < 0 or p.value > 1) then error("bad_args: point " .. k .. " value must be normalized, 0 to 1") end
+    if p.shape ~= nil and p.shape ~= json.null and (type(p.shape) ~= "number" or p.shape ~= math.floor(p.shape)
+        or p.shape < 0 or p.shape > 5) then
+      error("bad_args: point " .. k .. " shape must be an integer from 0 to 5")
+    end
+  end
+  local env
+  if volume then env = reaper.GetTrackEnvelopeByName(tr, "Volume") else env = reaper.GetFXEnvelope(tr, fxi, param, false) end
+  if env and reaper.CountAutomationItems(env) > 0 then
+    error("refused: the envelope has automation items, which these points would not replace")
+  end
+  if not volume then
+    env = env or reaper.GetFXEnvelope(tr, fxi, param, true)
   else
-    volume = true
-    env = reaper.GetTrackEnvelopeByName(tr, "Volume")
     if not env then
       -- the API has no call that creates it, so show it with the native action on this track alone
       local saved = {}
@@ -522,25 +547,44 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
   if not env then error("failed: no envelope") end
   local mode = reaper.GetEnvelopeScalingMode(env)
   local function scaled(p)
-    local v = need(p, "value", "number")
-    if volume then v = reaper.ScaleToEnvelopeMode(mode, 10 ^ (v / 20)) end
-    return v
+    if volume then return reaper.ScaleToEnvelopeMode(mode, 10 ^ (p.value / 20)) end
+    return p.value
   end
-  reaper.DeleteEnvelopePointRange(env, -1, 1e9)
-  for i = reaper.CountEnvelopePoints(env) - 1, 0, -1 do reaper.DeleteEnvelopePointEx(env, -1, i) end
-  -- a new envelope can keep a default point at time 0 (an effect parameter's at 1, its maximum), which would ramp
-  -- into the first point given, so whatever is left takes the first value asked for
-  local left = reaper.CountEnvelopePoints(env)
-  if #points > 0 then
-    for i = 0, left - 1 do
-      local _, t = reaper.GetEnvelopePoint(env, i)
-      reaper.SetEnvelopePoint(env, i, t, scaled(points[1]), 0, 0, false, true)
+  local saved = {}
+  for i = 0, reaper.CountEnvelopePoints(env) - 1 do
+    local _, t, v, shape, tension, selected = reaper.GetEnvelopePoint(env, i)
+    saved[#saved + 1] = { t, v, shape, tension, selected }
+  end
+  local function replace()
+    reaper.DeleteEnvelopePointRange(env, -1, 1e9)
+    for i = reaper.CountEnvelopePoints(env) - 1, 0, -1 do reaper.DeleteEnvelopePointEx(env, -1, i) end
+    -- a new envelope can keep a default point at time 0 (an effect parameter's at 1, its maximum), which would ramp
+    -- into the first point given, so whatever is left takes the first value asked for
+    if #points > 0 then
+      for i = 0, reaper.CountEnvelopePoints(env) - 1 do
+        local _, t = reaper.GetEnvelopePoint(env, i)
+        if not reaper.SetEnvelopePoint(env, i, t, scaled(points[1]), 0, 0, false, true) then
+          error("failed: SetEnvelopePoint")
+        end
+      end
     end
+    for _, p in ipairs(points) do
+      local shape = (p.shape == nil or p.shape == json.null) and 0 or p.shape
+      if not reaper.InsertEnvelopePoint(env, p.time, scaled(p), shape, 0, false, true) then
+        error("failed: InsertEnvelopePoint")
+      end
+    end
+    if not reaper.Envelope_SortPoints(env) then error("failed: Envelope_SortPoints") end
   end
-  for _, p in ipairs(points) do
-    reaper.InsertEnvelopePoint(env, need(p, "time", "number"), scaled(p), p.shape or 0, 0, false, true)
+  local ok, err = pcall(replace)
+  if not ok then
+    -- put the points that were there back before reporting the failure
+    reaper.DeleteEnvelopePointRange(env, -1, 1e9)
+    for i = reaper.CountEnvelopePoints(env) - 1, 0, -1 do reaper.DeleteEnvelopePointEx(env, -1, i) end
+    for _, s in ipairs(saved) do reaper.InsertEnvelopePoint(env, s[1], s[2], s[3], s[4], s[5], true) end
+    reaper.Envelope_SortPoints(env)
+    error(err, 0)
   end
-  reaper.Envelope_SortPoints(env)
   local back = json.array({})
   for i = 0, reaper.CountEnvelopePoints(env) - 1 do
     local _, t, v, shape = reaper.GetEnvelopePoint(env, i)

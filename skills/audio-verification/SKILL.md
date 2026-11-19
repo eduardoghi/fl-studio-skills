@@ -344,7 +344,7 @@ These checks come from one mix with a stereo processed guitar, a residual "other
   sources into the rebuild and separating again. Real piano and electric piano patches playing with a guitar, at the
   level of the original's "piano" stem, went 73 to 100% into the guitar stem, and even 20 dB louder the piano stem
   stayed 40 dB or more under the mix. The original's piano stem held something none of them reproduced, so the stem
-  showed that a layer existed but not what it was.
+  showed content the rebuild was missing, not that an independent instrument existed or which one.
 - A stem can lose part of an instrument's harmonics to other stems. Before EQ, saturation or other effects chase the
   whole spectral difference to a stem, compare with the mix and with other separators. A bass stem stayed darker
   than every rebuild, and that remainder was left alone rather than taken as the instrument's tone, without proof
