@@ -209,9 +209,10 @@ what to check, not as thresholds for another recording.
   - natural decay falls gradually and is the same in the other stems;
   - with no MIDI note active, the sound comes from the instrument, such as a keyswitch, a release or a compressor
     tail.
-- When an instrument's release fills a rest, ending the notes isn't enough, so add a volume envelope over the rest.
-  A pad patch with a long release stayed only 5 dB down in a rest of 0.6 s after its notes stopped, while the
-  reference fell by more than 40 dB.
+- When an instrument's release fills a rest, ending the notes may not be enough. A pad patch with a long release
+  stayed only 5 dB down in a rest of 0.6 s after its notes stopped, while the reference fell by more than 40 dB.
+  Shorten the patch's release, end the notes earlier, mute them with an articulation, or add a volume envelope over
+  the rest, and ramp any gain change over a few tens of milliseconds so it doesn't click.
 - When a correction moves a note's start, recompute anything calibrated at the old one. A velocity measured at a
   start that sat inside a rest came out at 44 instead of about 112.
 - A sampled instrument with round robin can play different samples in two renders even where the notes are the

@@ -70,6 +70,7 @@ Every call prints JSON and exits with a code that says what happened.
 | `fx.params` | `track`, `fx`, `contains` (optional) | index, name, normalized value, displayed text, identifier |
 | `fx.set_param` | `track`, `fx`, `param`, `value` | value before and after, and the displayed text |
 | `fx.show` | `track`, `fx`, `show` | opens or hides the plugin window |
+| `envelope.set` | `track`, `points` (`time`, `value`, `shape`), and `fx` with `param` for an effect parameter | replaces the envelope's points and reads them back. Volume values are in dB, parameter values normalized |
 | `fx.state_get` | `track`, `fx` | the whole state (`vst_chunk`) and its length |
 | `fx.state_set` | `track`, `fx`, `chunk` | whether the state read back identical |
 | `fx.restore_fresh` | `track`, `fx`, `chunk`, `name` | writes the state into a new instance of the same binary, then deletes the old one |

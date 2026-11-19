@@ -15,7 +15,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.4"
+local VERSION = "0.2.5"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
 if reaper.set_action_options then reaper.set_action_options(1 | 2) end
@@ -495,6 +495,59 @@ COMMANDS["fx.set_param"] = { mutates = true, run = function(a)
   if not reaper.TrackFX_SetParamNormalized(tr, i, p, need(a, "value", "number")) then error("failed: set param") end
   local _, fmt = reaper.TrackFX_GetFormattedParamValue(tr, i, p)
   return { before = before, value = reaper.TrackFX_GetParamNormalized(tr, i, p), text = fmt }
+end }
+
+-- points of a track's volume envelope (values in dB) or of an effect parameter's envelope (normalized values),
+-- replacing the points already there, read back after sorting
+COMMANDS["envelope.set"] = { mutates = true, run = function(a)
+  local tr = track_by_guid(need(a, "track", "string"))
+  local points = need(a, "points", "table")
+  local env, volume
+  if a.fx ~= nil and a.fx ~= json.null then
+    env = reaper.GetFXEnvelope(tr, fx_index(tr, a), need(a, "param", "number"), true)
+  else
+    volume = true
+    env = reaper.GetTrackEnvelopeByName(tr, "Volume")
+    if not env then
+      -- the API has no call that creates it, so show it with the native action on this track alone
+      local saved = {}
+      for i = 0, reaper.CountSelectedTracks(0) - 1 do saved[#saved + 1] = reaper.GetSelectedTrack(0, i) end
+      reaper.SetOnlyTrackSelected(tr)
+      reaper.Main_OnCommand(40406, 0) -- Track: Toggle track volume envelope visible
+      for i = 0, reaper.CountTracks(0) - 1 do reaper.SetTrackSelected(reaper.GetTrack(0, i), false) end
+      for _, t in ipairs(saved) do reaper.SetTrackSelected(t, true) end
+      env = reaper.GetTrackEnvelopeByName(tr, "Volume")
+    end
+  end
+  if not env then error("failed: no envelope") end
+  local mode = reaper.GetEnvelopeScalingMode(env)
+  local function scaled(p)
+    local v = need(p, "value", "number")
+    if volume then v = reaper.ScaleToEnvelopeMode(mode, 10 ^ (v / 20)) end
+    return v
+  end
+  reaper.DeleteEnvelopePointRange(env, -1, 1e9)
+  for i = reaper.CountEnvelopePoints(env) - 1, 0, -1 do reaper.DeleteEnvelopePointEx(env, -1, i) end
+  -- a new envelope can keep a default point at time 0 (an effect parameter's at 1, its maximum), which would ramp
+  -- into the first point given, so whatever is left takes the first value asked for
+  local left = reaper.CountEnvelopePoints(env)
+  if #points > 0 then
+    for i = 0, left - 1 do
+      local _, t = reaper.GetEnvelopePoint(env, i)
+      reaper.SetEnvelopePoint(env, i, t, scaled(points[1]), 0, 0, false, true)
+    end
+  end
+  for _, p in ipairs(points) do
+    reaper.InsertEnvelopePoint(env, need(p, "time", "number"), scaled(p), p.shape or 0, 0, false, true)
+  end
+  reaper.Envelope_SortPoints(env)
+  local back = json.array({})
+  for i = 0, reaper.CountEnvelopePoints(env) - 1 do
+    local _, t, v, shape = reaper.GetEnvelopePoint(env, i)
+    if volume then v = 20 * math.log(math.max(reaper.ScaleFromEnvelopeMode(mode, v), 1e-10), 10) end
+    back[#back + 1] = { time = t, value = v, shape = shape }
+  end
+  return { points = back }
 end }
 
 COMMANDS["fx.show"] = { run = function(a)
