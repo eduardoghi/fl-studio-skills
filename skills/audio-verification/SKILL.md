@@ -105,6 +105,11 @@ When a listening file is a sum of parts made offline, check that it equals the d
 on the lossless files before any MP3. Give every candidate the same accompaniment, ideally the same audio files
 rather than new renders, so round robin and modulation in the accompaniment don't differ between candidates.
 
+When two measures disagree, compare their windows, bands and definitions before changing the part. A dip at a chord
+change read 1.8 dB when the minimum within 0.15 s was compared with the level 0.1 to 0.3 s away, and 15.5 dB when the
+minimum within 0.5 s was compared with the median 0.6 to 1.3 s away. The minimum fell 0.2 s before the change, inside
+the first method's reference window.
+
 Report each number with what it takes to reproduce it where it applies, such as the band, the window length and
 overlap, the range analyzed, how active frames were chosen, the normalization or gain, and the formula. Values that worked
 on one recording are examples, not thresholds.
@@ -204,6 +209,9 @@ what to check, not as thresholds for another recording.
   - natural decay falls gradually and is the same in the other stems;
   - with no MIDI note active, the sound comes from the instrument, such as a keyswitch, a release or a compressor
     tail.
+- When an instrument's release fills a rest, ending the notes isn't enough, so add a volume envelope over the rest.
+  A pad patch with a long release stayed only 5 dB down in a rest of 0.6 s after its notes stopped, while the
+  reference fell by more than 40 dB.
 - When a correction moves a note's start, recompute anything calibrated at the old one. A velocity measured at a
   start that sat inside a rest came out at 44 instead of about 112.
 - A sampled instrument with round robin can play different samples in two renders even where the notes are the
@@ -240,6 +248,15 @@ These come from one guitar part with heavy stereo processing, again as examples 
   all of them. What a presence threshold still lets through is mostly harmonics 2 to 4 (+12, +19, +24 semitones).
 - Treat a pitch 12, 19 or 24 semitones above another detected pitch, with weaker evidence and lower level, as a
   harmonic rather than a note.
+- A strong note also lifts the bins a semitone away. In one pad stem, taking every bin above a floor filled the chords
+  with pairs a semitone apart (B3 with C4, F#3 with G3), and keeping only bins that are local peaks across semitones
+  left the triads. A local peak rule doesn't prove that two neighbouring notes can't sound together, so check a
+  cluster against other evidence (another separator, the harmony, a render) before dropping it.
+- For a sustained layer, read Mid and Side apart when it is wide, and place chord changes where the outgoing and
+  incoming voices cross rather than on the grid. Rendering each voicing hypothesis on a plain sine and comparing the
+  semitone profile per beat with the stem settled the voicings. It can't settle articulation (a held note against
+  one struck again), because a sine with a long release hid a 30 ms gap. Test that on the instrument that will play
+  the part.
 - Count tools as independent only across model families. The same model on stems from two separators, or two
   checkpoints of one model, make the same mistakes. Requiring two families beat both single tools and a stricter
   three-family rule, which kept precision high but lost half the notes.
@@ -318,6 +335,10 @@ These checks come from one mix with a stereo processed guitar, a residual "other
   known part's own stem, since a part's harmonics put energy an octave up too. A "piano" stem had 73 to 79% of its
   attacks on guitar notes (22 to 27% by chance) and its energy an octave above them, while both guitar stems had
   similar energy at the pitch and an octave up, so it was a layer doubling the line an octave higher.
+- Compare width section by section and band by band, with the left-right correlation and the level lost in mono,
+  before copying a stem's width. A pad stem had its side 6 to 11 dB over its mid below 300 Hz in some sections and
+  not in others. A mid and side chain that copied that width everywhere lost 8.3 dB in mono where the plain patch
+  lost 3.1, so the widening fits as automation per section in the mix rather than a fixed chain.
 - A stem can lose part of an instrument's harmonics to other stems. Before EQ, saturation or other effects chase the
   whole spectral difference to a stem, compare with the mix and with other separators. A bass stem stayed darker
   than every rebuild, and that remainder was left alone rather than taken as the instrument's tone, without proof

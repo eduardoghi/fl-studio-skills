@@ -5,6 +5,9 @@ description: Notes on specific instruments and effects, covering what their cont
 
 # Plugin notes
 
+A plugin listed in a bundle, a license or an inventory may not be installed. Check the host's plugin list or the plugin
+folders before planning with it. One bundle's list named three synths that weren't installed in any format.
+
 Read only the file of the plugin in use:
 
 | Plugin | File | Worth knowing first |
@@ -24,6 +27,7 @@ Read only the file of the plugin in use:
 | Guitar Rig 7 | `plugins/guitar-rig-7.md` | Exposes its components only after a preset loads, which takes a real double click |
 | Archetype Cory Wong X | `plugins/archetype-cory-wong-x.md` | Its default amp and cabinet scoop the mids while the centroid looks right |
 | PRISM (Aurally Sound) | `plugins/prism.md` | Every window shows one shared ARA document, so pick the track first |
+| ReaSynth (REAPER) | `plugins/reasynth.md` | Every control reaches the host, and some units aren't what the text suggests |
 | Melodyne 5 Studio | `plugins/melodyne.md` | The standalone's menus take `WM_COMMAND`, and its MIDI export puts the tempo map in a second file |
 
 Each file says where its facts come from. "Manual" means the maker's documentation, in our own words. "Observed"
