@@ -340,6 +340,11 @@ These checks come from one mix with a stereo processed guitar, a residual "other
   before copying a stem's width. A pad stem had its side 6 to 11 dB over its mid below 300 Hz in some sections and
   not in others. A mid and side chain that copied that width everywhere lost 8.3 dB in mono where the plain patch
   lost 3.1, so the widening fits as automation per section in the mix rather than a fixed chain.
+- A stem's name doesn't identify the instrument of a layer that doubles another part. Calibrate it by mixing known
+  sources into the rebuild and separating again. Real piano and electric piano patches playing with a guitar, at the
+  level of the original's "piano" stem, went 73 to 100% into the guitar stem, and even 20 dB louder the piano stem
+  stayed 40 dB or more under the mix. The original's piano stem held something none of them reproduced, so the stem
+  showed that a layer existed but not what it was.
 - A stem can lose part of an instrument's harmonics to other stems. Before EQ, saturation or other effects chase the
   whole spectral difference to a stem, compare with the mix and with other separators. A bass stem stayed darker
   than every rebuild, and that remainder was left alone rather than taken as the instrument's tone, without proof
