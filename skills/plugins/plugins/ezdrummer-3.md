@@ -36,5 +36,9 @@ hit, rendered and measured, so the piece is identified by its sound and not only
 - In the E-Drums/MIDI In panel, the Velocity and Mapping tabs ignored posted clicks even with FL in front, while the
   panel's selectors answered. The map was read from renders instead.
 - Choosing a kit loads its own mixer preset, `Basic Rogers` for Post-Rock.
+- In REAPER 7.86 the kit selector took a real click on the selector and on the row, and Post-Rock loaded its mixer
+  preset there too. The same MIDI rendered in REAPER came out 2.1 dB louder than FL's render in every band, with the
+  same band profile and stereo, so match the level when moving a part between hosts. With the level matched, the two
+  differed by -7.4 dB of residual against -13.5 dB between two REAPER renders, from different round robin samples.
 - A new instance feeds the Master and follows the host tempo (`Follow Host` is on). It plays the notes it receives
   without anything in its own timeline.

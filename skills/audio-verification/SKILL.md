@@ -307,6 +307,17 @@ These checks come from one mix with a stereo processed guitar, a residual "other
   guitar with a short stereo reverb and, separately, with a long dark tail added went 97 to 99% into the guitar stem,
   tail included, and the "other" stem stayed 54 dB or more below. Those effects couldn't produce the reference's
   residual, which pointed to a source the model doesn't call guitar.
+- To find what a mix holds beyond the parts already rebuilt, run the same separator with the same settings on the
+  rebuild and compare each leftover stem bar by bar, as its level against the mix it came from. The rebuild's stems
+  show how much the separator leaks from the known parts, and what the original's stems hold above that is evidence
+  of a missing layer. That avoids reading the residual between the mix and the rebuild as a stem, which would carry
+  every difference in phase, tone and playing. On one song the "other" stem sat 12 to 40 dB under the mix while the
+  rebuild's sat 58 to 79 dB lower than that, and the "vocals" stem was empty in both.
+- To tell a doubling from an independent layer, check whether its attacks fall on the known part's notes more often
+  than chance, and where its energy sits relative to each note (same pitch, an octave up). Run the same test on the
+  known part's own stem, since a part's harmonics put energy an octave up too. A "piano" stem had 73 to 79% of its
+  attacks on guitar notes (22 to 27% by chance) and its energy an octave above them, while both guitar stems had
+  similar energy at the pitch and an octave up, so it was a layer doubling the line an octave higher.
 - A stem can lose part of an instrument's harmonics to other stems. Before EQ, saturation or other effects chase the
   whole spectral difference to a stem, compare with the mix and with other separators. A bass stem stayed darker
   than every rebuild, and that remainder was left alone rather than taken as the instrument's tone, without proof
