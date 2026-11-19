@@ -71,9 +71,17 @@ were right and the change was slow.
 
 ## Comparing versions
 
-Louder usually reads as better, so match levels before asking anyone to choose. Use `--peak` for whole takes
-and `--rms` for short excerpts, where one hit would set the whole gain. Keep the original files, and say which
-copies had their gain changed.
+Louder usually reads as better, so match levels before asking anyone to choose. What to match depends on the
+question:
+
+- For tone alone, matching each excerpt's own level is fair.
+- For playing, dynamics, rests, articulation or arrangement, the level differences between passages are part of what
+  is compared. Compute one gain per file on the whole piece and keep it in every excerpt taken from it. Level the
+  whole files first and then take the excerpts with `cut`, which keeps levels. `match --seconds` cuts and fades each
+  file before computing its gain, so it levels the excerpt itself and suits only the first case.
+
+Use `--peak` for whole takes and `--rms` for short excerpts, where one hit would set the whole gain. Keep the
+original files, and say which copies had their gain changed.
 
 Use `cut` instead when the level difference is the thing being compared, such as a passage with and without a new
 layer. It keeps each file's level. End the cut before the next section starts, because a fade over the entry of a
@@ -87,7 +95,19 @@ effects start at a different phase each time. In one rebuild no two of four rend
 residuals up to -3 to -5 dB between repeats, and a reverb with its default modulation never rendered the same twice.
 Before reading a difference between two versions as a change, render each a few times and judge it against the
 spread between repeats (`mps wav variation` in this repository). Keep the effect as it will be in the mix and allow
-for its variation, or turn its modulation off only for the comparison and say so.
+for its variation, or turn its modulation off only for the comparison and say so. `mps wav variation` compares the
+signals sample by sample, which tells whether renders differ, not whether a given measure moved. When a decision
+rests on a small difference in an attack, envelope, dynamics or band measure, take that measure on several renders
+of each candidate and compare the medians against the spread. Call a difference inside the spread inconclusive, not
+an improvement.
+
+When a listening file is a sum of parts made offline, check that it equals the declared parts times their gains,
+on the lossless files before any MP3. Give every candidate the same accompaniment, ideally the same audio files
+rather than new renders, so round robin and modulation in the accompaniment don't differ between candidates.
+
+Report each number with what it takes to reproduce it where it applies, such as the band, the window length and
+overlap, the range analyzed, how active frames were chosen, the normalization or gain, and the formula. Values that worked
+on one recording are examples, not thresholds.
 
 To judge a rebuild as a whole, export each part alone from the same project (in FL, the same pattern) and compare its level relative to the sum
 of the parts, section by section, with the same parts in the reference's stems. The median difference across sections
@@ -104,6 +124,10 @@ chain per render. Measure at the reference's own attack times, since the render 
 - how far the attack rises above the sustain right after it, broadband and above 2 kHz, where the pick sits
 - how far the sound falls between one attack and the next
 - crest factor, left-right correlation and the band profile normalized to the total
+
+Choose the bands for the instrument and the question. When nearly all the energy falls in one band, the profile
+can't tell versions apart. Guitar bands put 99% of a bass in their lowest band, while 20-80, 80-150, 150-300,
+300-1000 and 1000-4000 Hz separated the bass versions. Those are an example, not a standard.
 
 What one guitar showed, as things to check rather than rules:
 
@@ -167,6 +191,11 @@ what to check, not as thresholds for another recording.
   On one stem, 45 of 235 repeats had no support from PRISM, Melodyne or the EZbass tracker. Only 21 of them fell
   within 60 ms of a kick. Merging all 45 held a note over a 162 ms rest. A per-event check kept 39 merged, restored
   6, and moved the attack that sat inside the rest to where the stem came back.
+- Keep the transcription apart from the version adapted to an instrument. An articulation that is really in the
+  recording may be one the library can't play faithfully, such as a soft re-attack it plays with a deep dip or a
+  short bend it plays as a long slide. Keep the evidence and the transcribed note in the transcription, and record
+  each adaptation and its reason in the rendered version, so a MIDI tuned to one library isn't taken for a more
+  accurate transcription.
 - After any change to note starts or ends, scan the whole piece for places where the original stops and the render
   keeps sounding. Compare a 30 to 150 Hz envelope of the stem with the render's, flag stretches where the stem stays
   35 dB under its 95th percentile for 60 ms or more while the render doesn't, and sort each one:
@@ -278,6 +307,10 @@ These checks come from one mix with a stereo processed guitar, a residual "other
   guitar with a short stereo reverb and, separately, with a long dark tail added went 97 to 99% into the guitar stem,
   tail included, and the "other" stem stayed 54 dB or more below. Those effects couldn't produce the reference's
   residual, which pointed to a source the model doesn't call guitar.
+- A stem can lose part of an instrument's harmonics to other stems. Before EQ, saturation or other effects chase the
+  whole spectral difference to a stem, compare with the mix and with other separators. A bass stem stayed darker
+  than every rebuild, and that remainder was left alone rather than taken as the instrument's tone, without proof
+  either way.
 - To get a known part for such a test, export each part alone from the same project with the others muted and add
   them offline. Subtracting an earlier render fails when the instrument isn't sample-identical between renders, as
   with round robin samples or modulated effects.

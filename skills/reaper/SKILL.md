@@ -153,6 +153,11 @@ captures windows and sends clicks, file names and keys without moving the mouse.
 input, which moves the user's pointer, so ask before using it. In REAPER that was Kontakt's own menu and the scroll bar
 of Evolution's SETUP list.
 
+Some programs export MIDI only by dragging a handle out of their window. In the EZbass standalone a real left-button
+drag from that handle to a folder window in Explorer wrote the file there (`plugins/ezbass.md` in the plugins skill).
+That is one validated case, not proof that other plugins built on the same framework accept it. It moves the pointer
+like any real input, so ask first, then check that the file exists and holds the expected notes.
+
 Deferred scripts kept running while a plugin or REAPER showed a modal dialog, so the bridge still answers then.
 
 ## Known limits
