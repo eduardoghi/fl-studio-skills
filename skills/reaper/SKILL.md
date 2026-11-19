@@ -60,6 +60,7 @@ Every call prints JSON and exits with a code that says what happened.
 | `project.info` | | tempo, sample rate, tracks with their items and effects |
 | `project.set_tempo` | `bpm`, `srate` (optional) | the values read back |
 | `track.add` | `name`, `index` (optional) | the track with its GUID |
+| `track.set` | `track`, and any of `volume_db`, `pan` (-1 to 1), `mute`, `name` | the track read back, with `volume_db` |
 | `item.add_midi` | `track`, `start_qn`, `end_qn` | the item's GUID |
 | `item.add_audio` | `track`, `path`, `position` (seconds) | the item's GUID and length, for re-amping a rendered DI through effect chains |
 | `midi.write` | `item`, `notes`, `ccs`, `replace` | every note and event read back |
@@ -131,7 +132,8 @@ mps render project.rpp --expect out.wav --samplerate 44100 --channels 2 --subtyp
   renderproject`), crashed every process that had Kontakt loaded. The record's `process_check` confirms the render
   used the saved tempo. It starts with `MPS_ROLE=render`, so the bridge doesn't start in it.
 - A dialog in the render process, such as a missing plugin, ends it in seconds with the dialog's text, instead of
-  waiting for the timeout. The progress window doesn't count, and the `fx_delay` prompt is answered with the
+  waiting for the timeout. A plugin window left open when the project was saved reopens in the render process and
+  counts as such a dialog, so close the windows (`fx.show` with `show` false) before saving a project for rendering. The progress window doesn't count, and the `fx_delay` prompt is answered with the
   project's own delay.
 - It refuses when a target file already exists, since a render writes over it without asking. Pass `--overwrite`
   only for a file that isn't kept as evidence.

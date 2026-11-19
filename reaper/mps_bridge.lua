@@ -15,7 +15,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.3"
+local VERSION = "0.2.4"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
 if reaper.set_action_options then reaper.set_action_options(1 | 2) end
@@ -372,6 +372,25 @@ COMMANDS["track.add"] = { mutates = true, run = function(a)
   local tr = reaper.GetTrack(0, idx)
   if a.name and a.name ~= json.null then reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", a.name, true) end
   return track_info(tr, idx)
+end }
+
+-- level, pan, mute and name of an existing track, each optional, read back from REAPER
+COMMANDS["track.set"] = { mutates = true, run = function(a)
+  local tr = track_by_guid(need(a, "track", "string"))
+  if a.volume_db ~= nil and a.volume_db ~= json.null then
+    if type(a.volume_db) ~= "number" then error("bad_request: volume_db must be a number") end
+    reaper.SetMediaTrackInfo_Value(tr, "D_VOL", 10 ^ (a.volume_db / 20))
+  end
+  if a.pan ~= nil and a.pan ~= json.null then
+    if type(a.pan) ~= "number" or a.pan < -1 or a.pan > 1 then error("bad_request: pan must be from -1 to 1") end
+    reaper.SetMediaTrackInfo_Value(tr, "D_PAN", a.pan)
+  end
+  if a.mute ~= nil and a.mute ~= json.null then reaper.SetMediaTrackInfo_Value(tr, "B_MUTE", a.mute and 1 or 0) end
+  if a.name and a.name ~= json.null then reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", a.name, true) end
+  local idx = math.floor(reaper.GetMediaTrackInfo_Value(tr, "IP_TRACKNUMBER")) - 1
+  local info = track_info(tr, idx)
+  info.volume_db = 20 * math.log(math.max(reaper.GetMediaTrackInfo_Value(tr, "D_VOL"), 1e-10), 10)
+  return info
 end }
 
 COMMANDS["item.add_midi"] = { mutates = true, run = function(a)
