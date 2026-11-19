@@ -153,14 +153,34 @@ what to check, not as thresholds for another recording.
     note being muted, sometimes together with a drum hit leaking into the stem
   - an event with no pitch and much brighter than the notes is usually leakage from another part
 - A kick leaking into a separated bass stem can pass for a repeated note, since it brings a short dip and some top
-  end with no pitch change. Test doubtful repeats three ways:
-  - see whether other transcribers start a note there;
-  - measure the drum stem's low band at the same instant;
-  - compare the shape of the dip and rise with a render that does re-pluck there and with one that holds the note.
+  end with no pitch change. Missing support from other transcribers is not enough to merge a repeat into the note
+  before it, since they also join real repeats. Check each doubtful repeat on its own:
+  - a rest measured before it (a gap after the previous note) rules out merging, because merging holds the note over
+    the silence;
+  - a dip that recurs in the stem, in stems from other separation models and in the mix is a real articulation, while
+    a dip only in one stem may be leakage or a separation artifact;
+  - the drum stem's low band at the same instant tells whether the dip follows the kick, as a group statistic more
+    than as proof for one event;
+  - render both readings on the rebuild instrument and compare the envelope around the event, because an instrument
+    whose re-pluck digs a deeper dip than the original's soft one can match worse by re-plucking a real attack.
 
-  On one stem, 45 of 235 repeats had no support from PRISM, Melodyne or the EZbass tracker. At those points the drum
-  stem rose 3.7 dB (1.0 dB at the confirmed repeats). The stem dipped 3.4 dB and rose 2.0, a re-plucked render dipped
-  8.5 and rose 6.0, and a held note dipped 5.2 and rose 2.6. Holding was closer, so they were removed as leakage.
+  On one stem, 45 of 235 repeats had no support from PRISM, Melodyne or the EZbass tracker. Only 21 of them fell
+  within 60 ms of a kick. Merging all 45 held a note over a 162 ms rest. A per-event check kept 39 merged, restored
+  6, and moved the attack that sat inside the rest to where the stem came back.
+- After any change to note starts or ends, scan the whole piece for places where the original stops and the render
+  keeps sounding. Compare a 30 to 150 Hz envelope of the stem with the render's, flag stretches where the stem stays
+  35 dB under its 95th percentile for 60 ms or more while the render doesn't, and sort each one:
+  - a real rest stops in the mix and in other separations too;
+  - a separation artifact is silent in one stem only;
+  - natural decay falls gradually and is the same in the other stems;
+  - with no MIDI note active, the sound comes from the instrument, such as a keyswitch, a release or a compressor
+    tail.
+- When a correction moves a note's start, recompute anything calibrated at the old one. A velocity measured at a
+  start that sat inside a rest came out at 44 instead of about 112.
+- A sampled instrument with round robin can play different samples in two renders even where the notes are the
+  same, for example after notes were added or removed earlier. Compare two renders on a stretch whose notes are
+  identical to learn that noise floor before reading per-event or per-bar differences. On one bass it reached 1 to 2
+  dB per event.
 - Commercial transcribers are a check, not a source of truth. On that bass, none added a note the segmentation had
   missed. Melodyne Melodic and the EZbass Audio Tracker joined repeated notes into long ones, and PRISM read 13 notes
   a semitone low. Count matched attacks, pitches on the matched notes and repeats kept, and render every candidate on

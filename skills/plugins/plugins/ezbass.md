@@ -43,6 +43,13 @@ The PDF also lists A#-1 Harmonic, B-1 Slap/Pop, C#0 Middle Finger and D0 Repeate
   starts about 30 ms after the key. Without overlapping notes, Slide (30) only jumped to the next note.
 - Every note-off plays a release with a small rise in pitch (under a semitone) that stays audible for 40 to 70 ms.
   Before a rest it reads as a short extra event, so end such notes earlier to match a muted reference.
+- A Slide Down (29) pressed at the very end of a note, before a rest, kept sounding into the rest. Its fall of about
+  10 semitones lasted 200 to 300 ms after the note-off, while the reference only bent 1 or 2 semitones and stopped.
+  In one of three such places it left no sound in the rest, so check each in a render. For a short fall at the end
+  of a muted note, leave the key out.
+- Two renders whose notes were identical in a passage, but differed earlier in the part, differed there by up to 1
+  to 2 dB per hit. Whether the round robin follows note order or chooses at random wasn't tested, so treat
+  differences of that size between renders as noise.
 
 ## Velocity
 
