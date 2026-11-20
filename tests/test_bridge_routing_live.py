@@ -75,6 +75,14 @@ def test_markers_and_regions(project):
     assert [(m["name"], m["region"]) for m in marks] == [("A", True), ("pause", False)]
 
 
+def test_new_volume_envelope_keeps_the_fader(project):
+    t = ok("track.add", {"name": "fader"})["guid"]
+    ok("track.set", {"track": t, "volume_db": -10.0})
+    ok("envelope.set", {"track": t, "points": [{"time": 0.0, "value": -2.0}, {"time": 5.0, "value": -2.0}]})
+    vol = [x["volume"] for x in ok("project.info")["tracks"] if x["guid"] == t][0]
+    assert abs(vol - 10 ** (-10 / 20)) < 1e-6, vol
+
+
 def test_pre_fx_volume_envelope(project):
     t = ok("track.add", {"name": "feed"})["guid"]
     ok("envelope.set", {"track": t, "target": "volume_prefx", "points": [{"time": 0.5, "value": -10.0},

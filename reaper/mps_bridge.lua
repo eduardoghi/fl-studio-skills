@@ -18,7 +18,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.9"
+local VERSION = "0.2.10"
 local FAULTS = os.getenv("MPS_BRIDGE_FAULTS") == "1"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
@@ -676,8 +676,13 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
       -- the API has no call that creates it, so show it with the native action on this track alone
       local saved = {}
       for i = 0, reaper.CountSelectedTracks(0) - 1 do saved[#saved + 1] = reaper.GetSelectedTrack(0, i) end
+      -- showing the post-FX volume envelope for the first time moves the fader's level into the envelope and sets the
+      -- fader to 0 dB. The points given here replace the envelope, so the fader gets its level back and the two
+      -- multiply, as they do for an envelope that already existed.
+      local fader = reaper.GetMediaTrackInfo_Value(tr, "D_VOL")
       reaper.SetOnlyTrackSelected(tr)
       reaper.Main_OnCommand(show_action, 0) -- Track: Toggle track (pre-FX) volume envelope visible
+      if reaper.GetMediaTrackInfo_Value(tr, "D_VOL") ~= fader then reaper.SetMediaTrackInfo_Value(tr, "D_VOL", fader) end
       for i = 0, reaper.CountTracks(0) - 1 do reaper.SetTrackSelected(reaper.GetTrack(0, i), false) end
       for _, t in ipairs(saved) do reaper.SetTrackSelected(t, true) end
       env = reaper.GetTrackEnvelopeByName(tr, envname)
