@@ -128,9 +128,11 @@ offline by their medians raised the correlation of the 100 ms envelope with the 
 0.67-0.94 per section, before any change to notes.
 
 Loudness weighting still counts much of what lies below 60 Hz. When a part carries far more sub-bass than the
-reference's stem, its loudness overstates what is heard. In one rebuild a 12 dB/oct low cut at 35 Hz took 1.8 LU off
-the drum part while every band above 60 Hz stayed within 0.2 dB. With both signals high-passed at 60 Hz (4th order),
-the drums read 1.3 to 2.8 LU low against the reference's stem, where the full band had read 0.2 to 1.2 LU low. So
+reference's stem, its loudness overstates what is heard. In one rebuild a low cut at 35 Hz took 1.8 LU off the drum
+part, 1.3 LU of it from below 60 Hz, and the mix bands above 60 Hz moved under 0.2 dB. Measure the filter itself
+before reading such a change, since a cut set at 35 Hz also took 2 dB from 60-100 Hz on the drums (see Pro-Q 4 in the
+`plugins` skill). With both signals high-passed at 60 Hz (4th order), the unfiltered drums read 1.3 to 2.8 LU low
+against the reference's stem, where the full band had read 0.2 to 1.2 LU low. So
 compare part levels above the sub when the parts differ there, and calibrate the separator on the rebuild, whose true
 parts are known (here the stem read within 0.35 dB of the true drums). The same applies to band shares normalized to
 the total. A sub cut raises every other band's share, so read absolute bands with one reference gain instead.
