@@ -12,10 +12,14 @@
 -- COMMANDS table.
 --
 -- An instance started only to render (environment variable MPS_ROLE=render) doesn't start the bridge.
+-- An instance started with MPS_BRIDGE_FAULTS=1 lets envelope.set take an "_fault" argument that makes it fail on
+-- purpose ("insert" in the middle of the change, "restore" also during the recovery), which the live tests use to
+-- check the recovery. Without that variable the argument is ignored.
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.6"
+local VERSION = "0.2.7"
+local FAULTS = os.getenv("MPS_BRIDGE_FAULTS") == "1"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
 if reaper.set_action_options then reaper.set_action_options(1 | 2) end
@@ -505,6 +509,10 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
   -- everything is checked before the first change, so a bad request leaves the envelope as it was
   local tr = track_by_guid(need(a, "track", "string"))
   local points = need(a, "points", "table")
+  -- an object such as {"time": 1, "value": 0} is a table too, but has nothing for ipairs to check, so it would pass
+  -- as an empty list. An empty list is refused as well, since this command replaces points and does not clear them.
+  if not is_array(points) then error("bad_args: 'points' must be an array of point objects") end
+  if #points == 0 then error("bad_args: 'points' is empty; envelope.set replaces points and does not clear envelopes") end
   local volume = a.fx == nil or a.fx == json.null
   local fxi, param
   if not volume then
@@ -530,6 +538,7 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
   if env and reaper.CountAutomationItems(env) > 0 then
     error("refused: the envelope has automation items, which these points would not replace")
   end
+  local created = env == nil
   if not volume then
     env = env or reaper.GetFXEnvelope(tr, fxi, param, true)
   else
@@ -550,14 +559,26 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
     if volume then return reaper.ScaleToEnvelopeMode(mode, 10 ^ (p.value / 20)) end
     return p.value
   end
-  local saved = {}
-  for i = 0, reaper.CountEnvelopePoints(env) - 1 do
-    local _, t, v, shape, tension, selected = reaper.GetEnvelopePoint(env, i)
-    saved[#saved + 1] = { t, v, shape, tension, selected }
+  local function snapshot()
+    local s = {}
+    for i = 0, reaper.CountEnvelopePoints(env) - 1 do
+      local _, t, v, shape, tension, selected = reaper.GetEnvelopePoint(env, i)
+      s[#s + 1] = { t, v, shape, tension, selected }
+    end
+    return s
+  end
+  local saved = snapshot()
+  local chunk_ok, chunk = reaper.GetEnvelopeStateChunk(env, "", false)
+  if not chunk_ok then error("failed: could not read the envelope state before changing it") end
+  local fault = FAULTS and a._fault or nil -- failure injection for the live tests, see the top of this file
+  local function clear()
+    if not reaper.DeleteEnvelopePointRange(env, -1, 1e9) then error("failed: DeleteEnvelopePointRange") end
+    for i = reaper.CountEnvelopePoints(env) - 1, 0, -1 do
+      if not reaper.DeleteEnvelopePointEx(env, -1, i) then error("failed: DeleteEnvelopePointEx") end
+    end
   end
   local function replace()
-    reaper.DeleteEnvelopePointRange(env, -1, 1e9)
-    for i = reaper.CountEnvelopePoints(env) - 1, 0, -1 do reaper.DeleteEnvelopePointEx(env, -1, i) end
+    clear()
     -- a new envelope can keep a default point at time 0 (an effect parameter's at 1, its maximum), which would ramp
     -- into the first point given, so whatever is left takes the first value asked for
     if #points > 0 then
@@ -568,7 +589,8 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
         end
       end
     end
-    for _, p in ipairs(points) do
+    for k, p in ipairs(points) do
+      if fault and k == 2 then error("failed: injected fault after the first point") end
       local shape = (p.shape == nil or p.shape == json.null) and 0 or p.shape
       if not reaper.InsertEnvelopePoint(env, p.time, scaled(p), shape, 0, false, true) then
         error("failed: InsertEnvelopePoint")
@@ -578,12 +600,45 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
   end
   local ok, err = pcall(replace)
   if not ok then
-    -- put the points that were there back before reporting the failure
-    reaper.DeleteEnvelopePointRange(env, -1, 1e9)
-    for i = reaper.CountEnvelopePoints(env) - 1, 0, -1 do reaper.DeleteEnvelopePointEx(env, -1, i) end
-    for _, s in ipairs(saved) do reaper.InsertEnvelopePoint(env, s[1], s[2], s[3], s[4], s[5], true) end
-    reaper.Envelope_SortPoints(env)
-    error(err, 0)
+    -- Put back the envelope state read before the change, then check the points against the snapshot. The error
+    -- says whether that worked, since a failed recovery must not be reported as a restored envelope.
+    local function same()
+      local now = snapshot()
+      if #now ~= #saved then return false end
+      for i, s in ipairs(saved) do
+        if math.abs(now[i][1] - s[1]) > 1e-9 or math.abs(now[i][2] - s[2]) > 1e-9 or now[i][3] ~= s[3] then
+          return false
+        end
+      end
+      return true
+    end
+    local restored = fault ~= "restore" and reaper.SetEnvelopeStateChunk(env, chunk, false) and same()
+    if not restored and fault ~= "restore" then
+      -- second attempt, point by point
+      restored = pcall(function()
+        clear()
+        for _, s in ipairs(saved) do
+          if not reaper.InsertEnvelopePoint(env, s[1], s[2], s[3], s[4], s[5], true) then error("insert") end
+        end
+        if not reaper.Envelope_SortPoints(env) then error("sort") end
+      end) and same()
+    end
+    local note
+    if not restored then
+      note = "recovery failed, so the envelope may be left partly changed"
+    elseif created then
+      -- the points are back, but the envelope did not exist before this request. A new effect envelope starts at
+      -- the parameter's maximum, so leave it inactive and hidden rather than driving the parameter.
+      local off = chunk:gsub("\nACT 1", "\nACT 0"):gsub("\nVIS 1", "\nVIS 0")
+      if reaper.SetEnvelopeStateChunk(env, off, false) then
+        note = "the envelope did not exist before this request; it was created and left inactive and hidden"
+      else
+        note = "the envelope did not exist before this request; it was created and could not be deactivated"
+      end
+    else
+      note = "the previous points were restored"
+    end
+    error(err .. " (" .. note .. ")", 0)
   end
   local back = json.array({})
   for i = 0, reaper.CountEnvelopePoints(env) - 1 do
