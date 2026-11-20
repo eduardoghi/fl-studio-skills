@@ -64,5 +64,15 @@ its Basic Rogers mixer. Check the state and the result again on any other versio
   out on their own outputs, so the sum keeps the parallel compression and the reverb, and each channel keeps its own
   bleed. The outputs measured as expected (Kick centroid 59 Hz, Hi-Hat 8.8 kHz). The FX bus was silent in that song.
 - The separated version is a new performance. Against an FL render of the same MIDI, both REAPER versions stayed
-  within 0.16 dB per section but left -7 dB of residual from other round robin samples, and they played 5 samples
-  earlier. Keep the approved render playing when its exact samples matter.
+  within 0.16 dB per section but left -7 dB of residual from other round robin samples. Keep the approved render
+  playing when its exact samples matter.
+- There's no fixed offset between the hosts to correct. Correlating the band below 150 Hz over 15 s windows put the
+  REAPER render -3 to +6 samples from the FL render depending on the window, against 0 to 2 samples between two REAPER
+  renders. Above 2 kHz the two hosts correlated under 0.2, since the samples differ.
+- Each render picks other samples, so outputs rendered in separate passes aren't one performance. Nine outputs
+  rendered one per pass summed to -14 dB of residual against the sum rendered in one pass, close to the -10 dB between
+  two whole renders. To get every output of one performance, render once to a multichannel master. Give the master as
+  many channels as the instrument's track (`MASTER_NCH 20 2` in the .rpp, which the bridge doesn't set), leave the
+  instrument's send to the parent on, drop the capture tracks, and render 20 channels (`render.configure` with
+  `channels` 20, then `mps render --channels 20 --allow-nonstandard`). Each pair of the file is one output, and the
+  pairs sum to the stereo performance of that pass.

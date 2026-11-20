@@ -116,6 +116,12 @@ each plugin and isn't assumed for another one. The `plugins` skill records what 
 `docs/state-checks.md` has the measurements. Use `--fresh` by default, since it doesn't depend on what the running
 instance held.
 
+Pro-Q 4 (FabFilter 4.x) keeps the name of its track inside its state. After a project was reopened, the name came
+back with a suffix such as `GUITARS (13)`, so `fx.state_set` reported the state as not identical, and the .rpp text
+differed in the base64 lines, though nothing audible changed. A dry guitar through two Pro-Q 4 instances rendered at
+-76 dB from its offline version, the same as before the reopen. Confirm such a state by rendering, and leave the
+base64 lines out when diffing project text.
+
 ## Rendering
 
 Renders follow the standard in `docs/render-standard.md` (32-bit float WAV, 44.1 kHz, stereo, explicit bounds, no
