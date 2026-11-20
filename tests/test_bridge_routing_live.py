@@ -48,6 +48,15 @@ def test_folder_color_send_and_order(project):
     assert [t["folder_depth"] for t in info["tracks"]] == [0, 1, -1]
 
 
+def test_send_from_a_channel_pair(project):
+    src = ok("track.add", {"name": "multi"})["guid"]
+    dst = ok("track.add", {"name": "out 3/4"})["guid"]
+    ok("track.set", {"track": src, "channels": 4})
+    send = ok("send.add", {"track": src, "dest": dst, "mode": "post_fx", "src_channel": 2})
+    assert send["src_channel"] == 2 and send["mode"] == 3
+    assert call("send.add", {"track": src, "dest": dst, "src_channel": 3})["status"] == "error"
+
+
 def test_bad_requests_change_nothing(project):
     a = ok("track.add", {"name": "a"})["guid"]
     for cmd, args in (("send.add", {"track": a, "dest": a}), ("track.set", {"track": a, "color": [1, 2]}),

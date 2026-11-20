@@ -18,7 +18,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.8"
+local VERSION = "0.2.9"
 local FAULTS = os.getenv("MPS_BRIDGE_FAULTS") == "1"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
@@ -261,6 +261,7 @@ local function track_info(tr, i)
     sends[#sends + 1] = { index = k, dest = dest and reaper.GetTrackGUID(dest) or json.null,
                           volume_db = 20 * math.log(math.max(reaper.GetTrackSendInfo_Value(tr, 0, k, "D_VOL"), 1e-10), 10),
                           mode = math.floor(reaper.GetTrackSendInfo_Value(tr, 0, k, "I_SENDMODE")),
+                          src_channel = math.floor(reaper.GetTrackSendInfo_Value(tr, 0, k, "I_SRCCHAN")),
                           mute = reaper.GetTrackSendInfo_Value(tr, 0, k, "B_MUTE") == 1 }
   end
   local color = math.floor(reaper.GetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR"))
@@ -484,10 +485,17 @@ COMMANDS["send.add"] = { mutates = true, run = function(a)
   if not mode then error("bad_args: mode must be post_fader, pre_fx or post_fx") end
   local vol = opt(a, "volume_db", "number") or 0
   if not finite(vol) or vol < -150 or vol > 12 then error("bad_args: volume_db must be -150 to +12") end
+  -- the first of the stereo pair of source channels to send, 0 for channels 1/2, 2 for 3/4 and so on, for the
+  -- separate outputs of a multi-output instrument
+  local srcch = opt(a, "src_channel", "number") or 0
+  if srcch ~= math.floor(srcch) or srcch < 0 or srcch > 126 or srcch % 2 ~= 0 then
+    error("bad_args: src_channel must be an even integer from 0 to 126")
+  end
   local k = reaper.CreateTrackSend(src, dst)
   if k < 0 then error("failed: CreateTrackSend") end
   if not (reaper.SetTrackSendInfo_Value(src, 0, k, "D_VOL", 10 ^ (vol / 20))
-          and reaper.SetTrackSendInfo_Value(src, 0, k, "I_SENDMODE", mode)) then
+          and reaper.SetTrackSendInfo_Value(src, 0, k, "I_SENDMODE", mode)
+          and reaper.SetTrackSendInfo_Value(src, 0, k, "I_SRCCHAN", srcch)) then
     reaper.RemoveTrackSend(src, 0, k)
     error("failed: could not set the send, so it was removed")
   end

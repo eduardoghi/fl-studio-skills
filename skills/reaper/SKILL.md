@@ -62,7 +62,7 @@ Every call prints JSON and exits with a code that says what happened.
 | `track.add` | `name`, `index` (optional) | the track with its GUID |
 | `track.set` | `track`, and any of `volume_db`, `pan` (-1 to 1), `mute`, `name`, `folder_depth` (REAPER's I_FOLDERDEPTH, 1 opens a folder, -n closes n levels), `main_send` (off for a track that must not reach its parent or the master), `channels` (even, 2 to 128), `color` ([r, g, b] or false) | the track read back, with `volume_db` |
 | `track.move` | `track`, `index` (counted before the move) | the track at its new place |
-| `send.add` | `track`, `dest`, `volume_db`, `mode` (`post_fader`, `pre_fx` or `post_fx`) | the send read back |
+| `send.add` | `track`, `dest`, `volume_db`, `mode` (`post_fader`, `pre_fx` or `post_fx`), `src_channel` (first channel of the stereo pair sent, 0 for 1/2, 2 for 3/4, for the outputs of a multi-output instrument) | the send read back |
 | `marker.add` | `name`, `position`, `end` (makes it a region), `color` | the marker or region |
 | `item.add_midi` | `track`, `start_qn`, `end_qn` | the item's GUID |
 | `item.add_audio` | `track`, `path`, `position` (seconds) | the item's GUID and length, for re-amping a rendered DI through effect chains |

@@ -13,6 +13,8 @@ from mps import reaper
 @pytest.fixture
 def instance(tmp_path, monkeypatch):
     monkeypatch.setenv("MPS_REAPER_RESOURCE", str(tmp_path))
+    # an instance pinned in the shell (for live work) would otherwise override the fake ones these tests make
+    monkeypatch.delenv("MPS_REAPER_INSTANCE", raising=False)
     d = tmp_path / "mps" / "instances" / "abc"
     for sub in ("req", "work", "res", "tmp"):
         (d / sub).mkdir(parents=True)
