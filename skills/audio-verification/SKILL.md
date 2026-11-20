@@ -349,6 +349,13 @@ These checks come from one mix with a stereo processed guitar, a residual "other
   of a missing layer. That avoids reading the residual between the mix and the rebuild as a stem, which would carry
   every difference in phase, tone and playing. On one song the "other" stem sat 12 to 40 dB under the mix while the
   rebuild's sat 58 to 79 dB lower than that, and the "vocals" stem was empty in both.
+- When extra attacks in a stem suggest a missing part, count the same test the other way too, the rebuild's attacks
+  with no match in the original. That count is the detector's floor. Repeat old evidence against the current rebuild,
+  since it may have been measured against an earlier version. A rhythm part once read as a 16th-note stream missing
+  from the transcription left 182 extra attacks in the original's guitar stem against 157 the other way, and on the
+  offbeats fewer than the rebuild's (95 against 109). Two other separators and the mix gave the same balance, and the
+  16th-note autocorrelation was near zero in both. The approved guitar already covered what the old transcription
+  had missed.
 - To tell a doubling from an independent layer, check whether its attacks fall on the known part's notes more often
   than chance, and where its energy sits relative to each note (same pitch, an octave up). Run the same test on the
   known part's own stem, since a part's harmonics put energy an octave up too. A "piano" stem had 73 to 79% of its
