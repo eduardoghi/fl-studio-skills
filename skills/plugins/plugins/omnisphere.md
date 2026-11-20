@@ -51,3 +51,8 @@ Observed on 3.0.2c (VST3) in REAPER 7.86 with real mouse input, which moves the 
 - A real click on a row of the list loads the patch. Its full state, read with `fx.state_get` once two reads in a row
   match, rendered later with that patch in a new instance, so a screening can collect states first and render them
   in a batch. With a load delay (`fx_delay`) of 20 s, none of 25 such renders came out silent.
+- The EFFECTS switch on the MAIN page turns off AMBIENCE, TONE and the FX page together, and the level moves with it.
+  On two Live Keyboardist presets it changed the render's RMS by +7 dB (an electric piano, peaks past 0 dBFS) and
+  -4 dB (a piano), so match levels again after switching it. AMBIENCE AMOUNT alone takes out the reverb.
+- On Dreamy Rhodes, dragging the MAIN DECAY knob down, even 15 px, left only the attack click, about 40 dB quieter.
+  Check each change to a MAIN envelope knob with a render before using it to shorten a sound.

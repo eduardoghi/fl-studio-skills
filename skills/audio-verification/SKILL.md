@@ -83,6 +83,12 @@ question:
 Use `--peak` for whole takes and `--rms` for short excerpts, where one hit would set the whole gain. Keep the
 original files, and say which copies had their gain changed.
 
+When versions differ in sustain, don't level them bar by bar against the reference again. A version with less
+sustain then gets louder attacks, which hides the change being compared. Keep the per-bar gain curve of the control,
+move it by one global offset per version, and record that offset separately. On one layer, switching a piano
+preset's effects off took about 4.4 dB off its raw level, which a single offset of +5.65 dB put back without touching
+the curve.
+
 Use `cut` instead when the level difference is the thing being compared, such as a passage with and without a new
 layer. It keeps each file's level. End the cut before the next section starts, because a fade over the entry of a
 band leaves that entry in the file. Measure the same range as well, since a window that runs into the next section
@@ -147,6 +153,12 @@ What one guitar showed, as things to check rather than rules:
   few milliseconds of spread already separated them.
 - Fill between notes depends on the notes too. Extra attacks in the part fill the gaps whatever the tone, so read
   that measure again after fixing the playing.
+- A preset's internal effects can set most of its sustain. Render it with them off, and with each one off, before
+  changing note lengths, envelopes or the instrument. On a piano preset that decayed far slower than the reference,
+  the decay between attacks went from -1.3 to -16 dB/s with the effects off, and to -12.4 with only the reverb off,
+  while shorter notes moved it about 2 dB/s and the amp envelope about 3. On an electric piano, neither the effects
+  nor the note lengths moved the decay inside a note beyond the spread between renders (4.4 dB/s on that preset).
+  There the effects made only the tail after the last note, so measure that spread before ranking the changes.
 
 ## Transcribing a part from a reference
 
@@ -253,6 +265,12 @@ These come from one guitar part with heavy stereo processing, again as examples 
   with pairs a semitone apart (B3 with C4, F#3 with G3), and keeping only bins that are local peaks across semitones
   left the triads. A local peak rule doesn't prove that two neighbouring notes can't sound together, so check a
   cluster against other evidence (another separator, the harmony, a render) before dropping it.
+- Weak spectral evidence for a note doesn't show the note is absent. Before removing one, ask for a second sign, such
+  as no rise of its semitone's energy at the attack. The two signs complement each other but aren't independent,
+  since both read the same bins. A missing rise alone proves nothing either. In one octave layer, 22 of 143 notes read
+  directly showed no rise because their pitch was already sounding, and all of them had strong evidence. Of 118 notes
+  added by a doubling rule, 38 were weak and 21 were weak with no rise. Removing those 21 changed the pitch profile
+  against the stem by less than the spread between two renders of the same notes, so the choice went to listening.
 - For a sustained layer, read Mid and Side apart when it is wide, and place chord changes where the outgoing and
   incoming voices cross rather than on the grid. Rendering each voicing hypothesis on a plain sine and comparing the
   semitone profile per beat with the stem settled the voicings. It can't settle articulation (a held note against
@@ -423,6 +441,10 @@ from 0 to 1, so in REAPER write them with `midi.write` (the `reaper` skill) as `
 - A level from a mixed or separated reference carries gain and processing. Take each hit's difference from the
   loudest hits of the same part, and pick the velocity of those loudest hits as an anchor. Where the transcription was
   right, the render matched the reference's relative level per note within 0.3 dB.
+- Don't calibrate from per-note levels that don't repeat between separators or that stay inside the instrument's own
+  variation between renders. Measure the same notes on a second separator's stem, and on two identical renders,
+  first. In one doubling layer, the levels per note correlated 0.21 between two separators and 0.38 between two
+  renders of the same MIDI, so the notes kept one velocity.
 - A target under the instrument's softest velocity can't be played, and velocity 1 left such hits up to 28 dB too
   loud. `velocity` flags them so they can be dropped or given another articulation.
 - A pitched instrument can answer velocity differently across its range. Calibrate a few notes spread over the
