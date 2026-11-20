@@ -42,3 +42,27 @@ hit, rendered and measured, so the piece is identified by its sound and not only
   differed by -7.4 dB of residual against -13.5 dB between two REAPER renders, from different round robin samples.
 - A new instance feeds the Master and follows the host tempo (`Follow Host` is on). It plays the notes it receives
   without anything in its own timeline.
+
+## Separate outputs without the interface
+
+Seen on 3.1.2 only (the state header reads `EZd3` followed by the bytes 03 01 02) in REAPER 7.86, with Post-Rock and
+its Basic Rogers mixer. Check the state and the result again on any other version before relying on this.
+
+- The plugin has 32 outputs, and its internal mixer is stored as text inside the state (`fx.state_get`). Each mic
+  routes to a bus (`route buss N`). The buses come in left and right pairs (here Kick 0/1, Snare 2/3, Hi-Hat 4/5, Toms
+  6/7, OH 8/9, Ambience 10/11, FX 12/13, a shared Comp 14/15 and a shared Reverb 16/17). Each one has its own effect,
+  and the channels feed the shared pairs through `send 7` (Comp) and `send 8` (Reverb). Every bus pair, the shared
+  ones included, had `route output 0`, which is outputs 1/2, and nothing processed the sum after the outputs.
+- Changing that 0 to a single digit N for both halves of a pair moves the bus to output N (channels 2N+1 and 2N+2).
+  A single digit keeps the state the same length. A longer edit wasn't tried, since the header may hold the size.
+  Leave the original state on the approved track and put the edited copy in a new instance.
+- To hear the outputs in REAPER, give the instrument's track as many channels as the outputs use (`track.set
+  channels`), turn its send to the parent off and capture each pair on its own track with a post-FX send from that
+  pair (`send.add src_channel`).
+- Moving nine pairs left output 0 digitally silent. The sum of the outputs matched the same kit rendered in stereo
+  within 0.06 dB per section and 0.06 dB of band error, the same as two stereo renders. The shared Comp and Reverb come
+  out on their own outputs, so the sum keeps the parallel compression and the reverb, and each channel keeps its own
+  bleed. The outputs measured as expected (Kick centroid 59 Hz, Hi-Hat 8.8 kHz). The FX bus was silent in that song.
+- The separated version is a new performance. Against an FL render of the same MIDI, both REAPER versions stayed
+  within 0.16 dB per section but left -7 dB of residual from other round robin samples, and they played 5 samples
+  earlier. Keep the approved render playing when its exact samples matter.
