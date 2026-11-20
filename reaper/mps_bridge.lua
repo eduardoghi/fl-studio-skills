@@ -18,7 +18,7 @@
 
 if os.getenv("MPS_ROLE") == "render" then return end
 
-local VERSION = "0.2.7"
+local VERSION = "0.2.8"
 local FAULTS = os.getenv("MPS_BRIDGE_FAULTS") == "1"
 
 -- launching the script again ends the running copy and starts the new one, instead of asking in a dialog
@@ -34,6 +34,8 @@ local function esc(s)
     return map[c] or string.format("\\u%04x", c:byte())
   end)
 end
+
+local function finite(v) return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge end
 
 local function is_array(t)
   if next(t) == nil then return getmetatable(t) == json.array_mt end
@@ -253,9 +255,26 @@ local function track_info(tr, i)
                           length = reaper.GetMediaItemInfo_Value(it, "D_LENGTH"),
                           midi = take ~= nil and reaper.TakeIsMIDI(take) or false }
   end
+  local sends = json.array({})
+  for k = 0, reaper.GetTrackNumSends(tr, 0) - 1 do
+    local dest = reaper.GetTrackSendInfo_Value(tr, 0, k, "P_DESTTRACK")
+    sends[#sends + 1] = { index = k, dest = dest and reaper.GetTrackGUID(dest) or json.null,
+                          volume_db = 20 * math.log(math.max(reaper.GetTrackSendInfo_Value(tr, 0, k, "D_VOL"), 1e-10), 10),
+                          mode = math.floor(reaper.GetTrackSendInfo_Value(tr, 0, k, "I_SENDMODE")),
+                          mute = reaper.GetTrackSendInfo_Value(tr, 0, k, "B_MUTE") == 1 }
+  end
+  local color = math.floor(reaper.GetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR"))
+  local rgb = json.null
+  if color & 0x1000000 ~= 0 then
+    local r, g, b = reaper.ColorFromNative(color & 0xFFFFFF)
+    rgb = json.array({ r, g, b })
+  end
   return { index = i, guid = reaper.GetTrackGUID(tr), name = name, fx = fx, items = items,
            volume = reaper.GetMediaTrackInfo_Value(tr, "D_VOL"), pan = reaper.GetMediaTrackInfo_Value(tr, "D_PAN"),
-           mute = reaper.GetMediaTrackInfo_Value(tr, "B_MUTE") == 1 }
+           mute = reaper.GetMediaTrackInfo_Value(tr, "B_MUTE") == 1,
+           folder_depth = math.floor(reaper.GetMediaTrackInfo_Value(tr, "I_FOLDERDEPTH")),
+           main_send = reaper.GetMediaTrackInfo_Value(tr, "B_MAINSEND") == 1,
+           channels = math.floor(reaper.GetMediaTrackInfo_Value(tr, "I_NCHAN")), color = rgb, sends = sends }
 end
 
 local function read_midi(take)
@@ -353,8 +372,17 @@ COMMANDS["project.info"] = { run = function()
   local tracks = json.array({})
   for i = 0, reaper.CountTracks(0) - 1 do tracks[#tracks + 1] = track_info(reaper.GetTrack(0, i), i) end
   local bpm, bpi = reaper.GetProjectTimeSignature2(0)
+  local markers = json.array({})
+  local k = 0
+  while true do
+    local n, isrgn, pos, rgnend, name, idx = reaper.EnumProjectMarkers3(0, k)
+    if n == 0 then break end
+    markers[#markers + 1] = { index = idx, region = isrgn, position = pos, ["end"] = isrgn and rgnend or json.null,
+                              name = name }
+    k = k + 1
+  end
   return { project = project_path(), dirty = reaper.IsProjectDirty(0) ~= 0, bpm = bpm, beats_per_measure = bpi,
-           srate = reaper.GetSetProjectInfo(0, "PROJECT_SRATE", 0, false), tracks = tracks }
+           srate = reaper.GetSetProjectInfo(0, "PROJECT_SRATE", 0, false), tracks = tracks, markers = markers }
 end }
 
 COMMANDS["project.set_tempo"] = { mutates = true, run = function(a)
@@ -391,10 +419,99 @@ COMMANDS["track.set"] = { mutates = true, run = function(a)
   end
   if a.mute ~= nil and a.mute ~= json.null then reaper.SetMediaTrackInfo_Value(tr, "B_MUTE", a.mute and 1 or 0) end
   if a.name and a.name ~= json.null then reaper.GetSetMediaTrackInfo_String(tr, "P_NAME", a.name, true) end
+  -- folder_depth is REAPER's I_FOLDERDEPTH (1 opens a folder at this track, 0 is a plain track, -n closes n levels)
+  if a.folder_depth ~= nil and a.folder_depth ~= json.null then
+    local d = a.folder_depth
+    if type(d) ~= "number" or d ~= math.floor(d) or d > 1 or d < -16 then
+      error("bad_request: folder_depth must be an integer from -16 to 1")
+    end
+    reaper.SetMediaTrackInfo_Value(tr, "I_FOLDERDEPTH", d)
+  end
+  if a.main_send ~= nil and a.main_send ~= json.null then
+    reaper.SetMediaTrackInfo_Value(tr, "B_MAINSEND", a.main_send and 1 or 0)
+  end
+  if a.channels ~= nil and a.channels ~= json.null then
+    local c = a.channels
+    if type(c) ~= "number" or c ~= math.floor(c) or c < 2 or c > 128 or c % 2 ~= 0 then
+      error("bad_request: channels must be an even integer from 2 to 128")
+    end
+    reaper.SetMediaTrackInfo_Value(tr, "I_NCHAN", c)
+  end
+  if a.color == false then
+    reaper.SetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR", 0)
+  elseif a.color ~= nil and a.color ~= json.null then
+    local c = a.color
+    if type(c) ~= "table" or #c ~= 3 then error("bad_request: color must be [r, g, b] or false") end
+    for _, v in ipairs(c) do
+      if type(v) ~= "number" or v ~= math.floor(v) or v < 0 or v > 255 then
+        error("bad_request: color components must be integers from 0 to 255")
+      end
+    end
+    reaper.SetMediaTrackInfo_Value(tr, "I_CUSTOMCOLOR", reaper.ColorToNative(c[1], c[2], c[3]) | 0x1000000)
+  end
   local idx = math.floor(reaper.GetMediaTrackInfo_Value(tr, "IP_TRACKNUMBER")) - 1
   local info = track_info(tr, idx)
   info.volume_db = 20 * math.log(math.max(reaper.GetMediaTrackInfo_Value(tr, "D_VOL"), 1e-10), 10)
   return info
+end }
+
+-- moves a track so it sits at `index` (0-based, counted before the move), keeping the selection as it was
+COMMANDS["track.move"] = { mutates = true, run = function(a)
+  local tr = track_by_guid(need(a, "track", "string"))
+  local idx = need(a, "index", "number")
+  if idx ~= math.floor(idx) or idx < 0 or idx > reaper.CountTracks(0) then
+    error("bad_args: index must be an integer from 0 to the number of tracks")
+  end
+  local saved = {}
+  for i = 0, reaper.CountSelectedTracks(0) - 1 do saved[#saved + 1] = reaper.GetSelectedTrack(0, i) end
+  reaper.SetOnlyTrackSelected(tr)
+  local ok = reaper.ReorderSelectedTracks(idx, 0)
+  for i = 0, reaper.CountTracks(0) - 1 do reaper.SetTrackSelected(reaper.GetTrack(0, i), false) end
+  for _, t in ipairs(saved) do reaper.SetTrackSelected(t, true) end
+  if not ok then error("failed: ReorderSelectedTracks") end
+  local now = math.floor(reaper.GetMediaTrackInfo_Value(tr, "IP_TRACKNUMBER")) - 1
+  return track_info(tr, now)
+end }
+
+local SEND_MODES = { post_fader = 0, pre_fx = 1, post_fx = 3 }
+
+-- a send from one track to another, with its level and where it taps the source (post_fader, pre_fx or post_fx)
+COMMANDS["send.add"] = { mutates = true, run = function(a)
+  local src = track_by_guid(need(a, "track", "string"))
+  local dst = track_by_guid(need(a, "dest", "string"))
+  if src == dst then error("bad_args: a track can't send to itself") end
+  local mode = SEND_MODES[opt(a, "mode", "string") or "post_fader"]
+  if not mode then error("bad_args: mode must be post_fader, pre_fx or post_fx") end
+  local vol = opt(a, "volume_db", "number") or 0
+  if not finite(vol) or vol < -150 or vol > 12 then error("bad_args: volume_db must be -150 to +12") end
+  local k = reaper.CreateTrackSend(src, dst)
+  if k < 0 then error("failed: CreateTrackSend") end
+  if not (reaper.SetTrackSendInfo_Value(src, 0, k, "D_VOL", 10 ^ (vol / 20))
+          and reaper.SetTrackSendInfo_Value(src, 0, k, "I_SENDMODE", mode)) then
+    reaper.RemoveTrackSend(src, 0, k)
+    error("failed: could not set the send, so it was removed")
+  end
+  local idx = math.floor(reaper.GetMediaTrackInfo_Value(src, "IP_TRACKNUMBER")) - 1
+  return track_info(src, idx).sends[k + 1]
+end }
+
+-- a project marker, or a region when `end` is given, with an optional [r, g, b] color
+COMMANDS["marker.add"] = { mutates = true, run = function(a)
+  local name = need(a, "name", "string")
+  local pos = need(a, "position", "number")
+  local stop = opt(a, "end", "number")
+  if not finite(pos) or pos < 0 or (stop and (not finite(stop) or stop <= pos)) then
+    error("bad_args: position must be 0 or more, and end later than position")
+  end
+  local color = 0
+  if a.color ~= nil and a.color ~= json.null then
+    local c = a.color
+    if type(c) ~= "table" or #c ~= 3 then error("bad_args: color must be [r, g, b]") end
+    color = reaper.ColorToNative(c[1], c[2], c[3]) | 0x1000000
+  end
+  local k = reaper.AddProjectMarker2(0, stop ~= nil, pos, stop or 0, name, -1, color)
+  if k < 0 then error("failed: AddProjectMarker2") end
+  return { index = k, region = stop ~= nil, position = pos, ["end"] = stop or json.null, name = name }
 end }
 
 COMMANDS["item.add_midi"] = { mutates = true, run = function(a)
@@ -503,7 +620,6 @@ end }
 
 -- points of a track's volume envelope (values in dB) or of an effect parameter's envelope (normalized values),
 -- replacing the points already there, read back after sorting
-local function finite(v) return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge end
 
 COMMANDS["envelope.set"] = { mutates = true, run = function(a)
   -- everything is checked before the first change, so a bad request leaves the envelope as it was
@@ -514,6 +630,12 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
   if not is_array(points) then error("bad_args: 'points' must be an array of point objects") end
   if #points == 0 then error("bad_args: 'points' is empty; envelope.set replaces points and does not clear envelopes") end
   local volume = a.fx == nil or a.fx == json.null
+  -- a track's volume envelope comes in two places, after the effects ("volume") or before them ("volume_prefx")
+  local target = opt(a, "target", "string") or "volume"
+  local ENVS = { volume = { "Volume", 40406 }, volume_prefx = { "Volume (Pre-FX)", 40408 } }
+  if not ENVS[target] then error("bad_args: target must be volume or volume_prefx") end
+  if not volume and target ~= "volume" then error("bad_args: target applies to track volume, not to an effect") end
+  local envname, show_action = ENVS[target][1], ENVS[target][2]
   local fxi, param
   if not volume then
     fxi = fx_index(tr, a)
@@ -534,7 +656,7 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
     end
   end
   local env
-  if volume then env = reaper.GetTrackEnvelopeByName(tr, "Volume") else env = reaper.GetFXEnvelope(tr, fxi, param, false) end
+  if volume then env = reaper.GetTrackEnvelopeByName(tr, envname) else env = reaper.GetFXEnvelope(tr, fxi, param, false) end
   if env and reaper.CountAutomationItems(env) > 0 then
     error("refused: the envelope has automation items, which these points would not replace")
   end
@@ -547,10 +669,10 @@ COMMANDS["envelope.set"] = { mutates = true, run = function(a)
       local saved = {}
       for i = 0, reaper.CountSelectedTracks(0) - 1 do saved[#saved + 1] = reaper.GetSelectedTrack(0, i) end
       reaper.SetOnlyTrackSelected(tr)
-      reaper.Main_OnCommand(40406, 0) -- Track: Toggle track volume envelope visible
+      reaper.Main_OnCommand(show_action, 0) -- Track: Toggle track (pre-FX) volume envelope visible
       for i = 0, reaper.CountTracks(0) - 1 do reaper.SetTrackSelected(reaper.GetTrack(0, i), false) end
       for _, t in ipairs(saved) do reaper.SetTrackSelected(t, true) end
-      env = reaper.GetTrackEnvelopeByName(tr, "Volume")
+      env = reaper.GetTrackEnvelopeByName(tr, envname)
     end
   end
   if not env then error("failed: no envelope") end

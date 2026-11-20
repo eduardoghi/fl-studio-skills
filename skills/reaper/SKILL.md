@@ -57,10 +57,13 @@ Every call prints JSON and exits with a code that says what happened.
 | `project.open` | `path` | opens it in a new tab, without prompts |
 | `project.save` | `path` (optional) | saves, and with `path` the project takes that name |
 | `project.close_tab` | `path` | closes the tabs holding that file, refusing one with unsaved changes |
-| `project.info` | | tempo, sample rate, tracks with their items and effects |
+| `project.info` | | tempo, sample rate, markers and regions, and tracks with their items, effects, sends, folder depth, color and channel count |
 | `project.set_tempo` | `bpm`, `srate` (optional) | the values read back |
 | `track.add` | `name`, `index` (optional) | the track with its GUID |
-| `track.set` | `track`, and any of `volume_db`, `pan` (-1 to 1), `mute`, `name` | the track read back, with `volume_db` |
+| `track.set` | `track`, and any of `volume_db`, `pan` (-1 to 1), `mute`, `name`, `folder_depth` (REAPER's I_FOLDERDEPTH, 1 opens a folder, -n closes n levels), `main_send` (off for a track that must not reach its parent or the master), `channels` (even, 2 to 128), `color` ([r, g, b] or false) | the track read back, with `volume_db` |
+| `track.move` | `track`, `index` (counted before the move) | the track at its new place |
+| `send.add` | `track`, `dest`, `volume_db`, `mode` (`post_fader`, `pre_fx` or `post_fx`) | the send read back |
+| `marker.add` | `name`, `position`, `end` (makes it a region), `color` | the marker or region |
 | `item.add_midi` | `track`, `start_qn`, `end_qn` | the item's GUID |
 | `item.add_audio` | `track`, `path`, `position` (seconds) | the item's GUID and length, for re-amping a rendered DI through effect chains |
 | `midi.write` | `item`, `notes`, `ccs`, `replace` | every note and event read back |
@@ -70,7 +73,7 @@ Every call prints JSON and exits with a code that says what happened.
 | `fx.params` | `track`, `fx`, `contains` (optional) | index, name, normalized value, displayed text, identifier |
 | `fx.set_param` | `track`, `fx`, `param`, `value` | value before and after, and the displayed text |
 | `fx.show` | `track`, `fx`, `show` | opens or hides the plugin window |
-| `envelope.set` | `track`, `points` (`time`, `value`, `shape`), and `fx` with `param` for an effect parameter | replaces the envelope's points and reads them back. Volume values are in dB, parameter values normalized. `points` must be a non-empty array, since the command doesn't clear envelopes. A request is checked in full before anything changes, and an envelope with automation items is refused. If the change fails midway, the error says whether the previous points came back, or whether the envelope was new and was left inactive |
+| `envelope.set` | `track`, `points` (`time`, `value`, `shape`), and `fx` with `param` for an effect parameter | replaces the envelope's points and reads them back. Volume values are in dB, parameter values normalized. `target` `volume_prefx` writes the volume envelope that sits before the effects, for a level that has to change what a reverb or compressor receives. `points` must be a non-empty array, since the command doesn't clear envelopes. A request is checked in full before anything changes, and an envelope with automation items is refused. If the change fails midway, the error says whether the previous points came back, or whether the envelope was new and was left inactive |
 | `fx.state_get` | `track`, `fx` | the whole state (`vst_chunk`) and its length |
 | `fx.state_set` | `track`, `fx`, `chunk` | whether the state read back identical |
 | `fx.restore_fresh` | `track`, `fx`, `chunk`, `name` | writes the state into a new instance of the same binary, then deletes the old one |
