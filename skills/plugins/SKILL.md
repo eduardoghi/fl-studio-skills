@@ -29,6 +29,7 @@ Read only the file of the plugin in use:
 | PRISM (Aurally Sound) | `plugins/prism.md` | Every window shows one shared ARA document, so pick the track first |
 | ReaSynth (REAPER) | `plugins/reasynth.md` | Every control reaches the host, and some units aren't what the text suggests |
 | Melodyne 5 Studio | `plugins/melodyne.md` | The standalone's menus take `WM_COMMAND`, and its MIDI export puts the tempo map in a second file |
+| FabFilter Pro-L 2 | `plugins/pro-l-2.md` | Output Level lowers the whole signal as well as capping it, and a −1 dBTP master overshot as MP3 |
 | FabFilter Pro-Q 4 | `plugins/pro-q-4.md` | A 12 dB/oct Low Cut at Q 0.71 is −6 dB at its frequency and still cuts three octaves above |
 
 Each file says where its facts come from. "Manual" means the maker's documentation, in our own words. "Observed"
