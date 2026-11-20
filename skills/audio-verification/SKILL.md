@@ -350,12 +350,24 @@ These checks come from one mix with a stereo processed guitar, a residual "other
   every difference in phase, tone and playing. On one song the "other" stem sat 12 to 40 dB under the mix while the
   rebuild's sat 58 to 79 dB lower than that, and the "vocals" stem was empty in both.
 - When extra attacks in a stem suggest a missing part, count the same test the other way too, the rebuild's attacks
-  with no match in the original. That count is the detector's floor. Repeat old evidence against the current rebuild,
+  with no match in the original. That count is a reference for the detector's disagreement, not an exact measure of
+  its error, since it can hold real differences in playing too. Repeat old evidence against the current rebuild,
   since it may have been measured against an earlier version. A rhythm part once read as a 16th-note stream missing
   from the transcription left 182 extra attacks in the original's guitar stem against 157 the other way, and on the
   offbeats fewer than the rebuild's (95 against 109). Two other separators and the mix gave the same balance, and the
   16th-note autocorrelation was near zero in both. The approved guitar already covered what the old transcription
   had missed.
+- Before reading a quiet layer's stem level as missing content, calibrate how the separator treats your own version
+  of it. Separate the layer alone, the rebuild without it, and the rebuild with it at a few gains (offline sums of the
+  same renders), and project each stem onto the layer's signal. A pad alone went whole into "other" in three
+  separators. Mixed with the guitar, one separator put nearly all of it in the guitar stem (−74 dB reached "other"),
+  and another kept −7 to −36 dB of it in "other" depending on the section. The response wasn't linear either, since
+  +6 dB of pad raised "other" by 7 to 18 dB. Stem differences of 14 to 31 dB came down to a pad 2 to 11 dB too quiet
+  once calibrated. Compare the layer with the original's stem directly as well, and treat the two results as the
+  ends of a range rather than a gain.
+- Drum tuning shows up in a chroma. A pitch class 13 to 18 % stronger in the original's mix sat entirely in its drum
+  stem, a kick or toms an octave above the rebuild's. Compare chroma above about 200 Hz, or per stem, before taking
+  such a difference for missing notes.
 - To tell a doubling from an independent layer, check whether its attacks fall on the known part's notes more often
   than chance, and where its energy sits relative to each note (same pitch, an octave up). Run the same test on the
   known part's own stem, since a part's harmonics put energy an octave up too. A "piano" stem had 73 to 79% of its
