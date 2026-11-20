@@ -78,22 +78,28 @@ def test_invalid_volume_request_keeps_the_envelope(project, bad):
 def test_invalid_parameter_request_keeps_the_envelope(project):
     track = ok("track.add", {"name": "env"})["guid"]
     fx = ok("fx.add", {"track": track, "name": "JS:Utility/volume"})["guid"]
-    ok("envelope.set", {"track": track, "fx": fx, "param": 0, "points": [{"time": 0.5, "value": 0.25},
-                                                                         {"time": 1.5, "value": 0.75}]})
+    ok(
+        "envelope.set",
+        {"track": track, "fx": fx, "param": 0, "points": [{"time": 0.5, "value": 0.25}, {"time": 1.5, "value": 0.75}]},
+    )
     ok("project.save", {"path": str(project)})
     before = envelope_points(project, "PARMENV")
     assert len(before) == 2
-    for args in ({"param": 0, "points": [{"time": 1.0, "value": 1.5}]},
-                 {"param": 9999, "points": [{"time": 1.0, "value": 0.5}]},
-                 {"param": 0.5, "points": [{"time": 1.0, "value": 0.5}]}):
+    for args in (
+        {"param": 0, "points": [{"time": 1.0, "value": 1.5}]},
+        {"param": 9999, "points": [{"time": 1.0, "value": 0.5}]},
+        {"param": 0.5, "points": [{"time": 1.0, "value": 0.5}]},
+    ):
         r = call("envelope.set", {"track": track, "fx": fx, **args})
         assert r["status"] == "error", args
     ok("project.save", {"path": str(project)})
     assert envelope_points(project, "PARMENV") == before
 
 
-faults = pytest.mark.skipif(not os.environ.get("MPS_BRIDGE_FAULTS"),
-                            reason="needs a REAPER started with MPS_BRIDGE_FAULTS=1 (and the same variable here)")
+faults = pytest.mark.skipif(
+    not os.environ.get("MPS_BRIDGE_FAULTS"),
+    reason="needs a REAPER started with MPS_BRIDGE_FAULTS=1 (and the same variable here)",
+)
 
 
 @faults
@@ -102,8 +108,10 @@ def test_failure_midway_restores_the_points(project):
     ok("envelope.set", {"track": track, "points": [{"time": 0.5, "value": 0.0}, {"time": 1.5, "value": -6.0}]})
     ok("project.save", {"path": str(project)})
     before = envelope_points(project, "VOLENV2")
-    r = call("envelope.set", {"track": track, "_fault": "insert",
-                              "points": [{"time": 1.0, "value": -3.0}, {"time": 2.0, "value": -9.0}]})
+    r = call(
+        "envelope.set",
+        {"track": track, "_fault": "insert", "points": [{"time": 1.0, "value": -3.0}, {"time": 2.0, "value": -9.0}]},
+    )
     assert r["status"] == "error" and "previous points were restored" in r["error"], r
     ok("project.save", {"path": str(project)})
     assert envelope_points(project, "VOLENV2") == before
@@ -113,8 +121,10 @@ def test_failure_midway_restores_the_points(project):
 def test_failed_recovery_is_reported(project):
     track = ok("track.add", {"name": "env"})["guid"]
     ok("envelope.set", {"track": track, "points": [{"time": 0.5, "value": 0.0}, {"time": 1.5, "value": -6.0}]})
-    r = call("envelope.set", {"track": track, "_fault": "restore",
-                              "points": [{"time": 1.0, "value": -3.0}, {"time": 2.0, "value": -9.0}]})
+    r = call(
+        "envelope.set",
+        {"track": track, "_fault": "restore", "points": [{"time": 1.0, "value": -3.0}, {"time": 2.0, "value": -9.0}]},
+    )
     assert r["status"] == "error" and "recovery failed" in r["error"], r
     assert "restored" not in r["error"]
 
@@ -123,8 +133,16 @@ def test_failed_recovery_is_reported(project):
 def test_failure_on_a_new_envelope_leaves_it_inactive(project):
     track = ok("track.add", {"name": "env"})["guid"]
     fx = ok("fx.add", {"track": track, "name": "JS:Utility/volume"})["guid"]
-    r = call("envelope.set", {"track": track, "fx": fx, "param": 0, "_fault": "insert",
-                              "points": [{"time": 0.5, "value": 0.25}, {"time": 1.5, "value": 0.75}]})
+    r = call(
+        "envelope.set",
+        {
+            "track": track,
+            "fx": fx,
+            "param": 0,
+            "_fault": "insert",
+            "points": [{"time": 0.5, "value": 0.25}, {"time": 1.5, "value": 0.75}],
+        },
+    )
     assert r["status"] == "error" and "left inactive and hidden" in r["error"], r
     ok("project.save", {"path": str(project)})
     body = envelope_block(project, "PARMENV")

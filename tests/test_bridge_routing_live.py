@@ -59,9 +59,13 @@ def test_send_from_a_channel_pair(project):
 
 def test_bad_requests_change_nothing(project):
     a = ok("track.add", {"name": "a"})["guid"]
-    for cmd, args in (("send.add", {"track": a, "dest": a}), ("track.set", {"track": a, "color": [1, 2]}),
-                      ("track.set", {"track": a, "folder_depth": 2}), ("track.set", {"track": a, "channels": 3}),
-                      ("send.add", {"track": a, "dest": a, "mode": "sideways"})):
+    for cmd, args in (
+        ("send.add", {"track": a, "dest": a}),
+        ("track.set", {"track": a, "color": [1, 2]}),
+        ("track.set", {"track": a, "folder_depth": 2}),
+        ("track.set", {"track": a, "channels": 3}),
+        ("send.add", {"track": a, "dest": a, "mode": "sideways"}),
+    ):
         assert call(cmd, args)["status"] == "error", (cmd, args)
     t = ok("project.info")["tracks"][0]
     assert t["sends"] == [] and t["color"] is None and t["folder_depth"] == 0 and t["channels"] == 2
@@ -79,14 +83,16 @@ def test_new_volume_envelope_keeps_the_fader(project):
     t = ok("track.add", {"name": "fader"})["guid"]
     ok("track.set", {"track": t, "volume_db": -10.0})
     ok("envelope.set", {"track": t, "points": [{"time": 0.0, "value": -2.0}, {"time": 5.0, "value": -2.0}]})
-    vol = [x["volume"] for x in ok("project.info")["tracks"] if x["guid"] == t][0]
+    vol = next(x["volume"] for x in ok("project.info")["tracks"] if x["guid"] == t)
     assert abs(vol - 10 ** (-10 / 20)) < 1e-6, vol
 
 
 def test_pre_fx_volume_envelope(project):
     t = ok("track.add", {"name": "feed"})["guid"]
-    ok("envelope.set", {"track": t, "target": "volume_prefx", "points": [{"time": 0.5, "value": -10.0},
-                                                                         {"time": 1.5, "value": 0.0}]})
+    ok(
+        "envelope.set",
+        {"track": t, "target": "volume_prefx", "points": [{"time": 0.5, "value": -10.0}, {"time": 1.5, "value": 0.0}]},
+    )
     assert call("envelope.set", {"track": t, "target": "pan", "points": [{"time": 0, "value": 0}]})["status"] == "error"
     ok("project.save", {"path": str(project)})
     text = project.read_text(encoding="utf-8", errors="replace")
