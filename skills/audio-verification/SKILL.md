@@ -111,6 +111,17 @@ When a listening file is a sum of parts made offline, check that it equals the d
 on the lossless files before any MP3. Give every candidate the same accompaniment, ideally the same audio files
 rather than new renders, so round robin and modulation in the accompaniment don't differ between candidates.
 
+To confirm automation or routing in a mix with modulated effects, also render a copy with the modulated sends muted.
+What's left plays the same every time and should match the offline sum of the same parts with the same curves,
+sample by sample. In one mix the full render matched its offline sum only to −14 dB of residual (modulated reverbs
+and a delay), while the copy without them matched to −83 dB. That confirmed every envelope point by point.
+
+Read the delivered files back before handing them over.
+- **WAV with dither.** A 24-bit file with TPDF dither added once should read back equal to the quantized samples, with
+  a residual near −144 dBFS against the float master.
+- **MP3.** Decode it and measure its true peak at 8x oversampling, since the encoding can pass the master's ceiling.
+  One MP3 made from a −1 dBTP master decoded at −0.975 dBTP (see Pro-L 2 in the `plugins` skill).
+
 When two measures disagree, compare their windows, bands and definitions before changing the part. A dip at a chord
 change read 1.8 dB when the minimum within 0.15 s was compared with the level 0.1 to 0.3 s away, and 15.5 dB when the
 minimum within 0.5 s was compared with the median 0.6 to 1.3 s away. The minimum fell 0.2 s before the change, inside

@@ -93,6 +93,21 @@ type prefix, such as `VST3:Kontakt 8` or `JS:`. `format` is `wav16`, `wav24` or 
 - A channel per note is what lets an instrument pick a string per channel, as Evolution's Channel-Based Strings does
   (see the `plugins` skill).
 
+## Volume automation
+
+- **Ramps.** REAPER interpolates volume envelope points on the fader scale, not in dB. For a ramp that has to be linear
+  in dB, or to match a curve computed offline, write a point every 10 ms along it. With that, renders matched
+  dB-linear offline curves to −83 dB of residual, at worst −84 dBFS in a single sample.
+- **Folders.** A folder track's pre-FX volume envelope (`volume_prefx`) scales the sum of its children, return tracks
+  inside the folder included, before the folder's own effects. With only linear effects on the folder, such as EQ, it
+  works as an output gain for the whole group. It leaves an existing post-FX envelope alone, and the two multiply.
+- **Project text.** In the .rpp, `<VOLENV` is the pre-FX volume envelope and `<VOLENV2` the post-FX one. Strip both
+  when diffing project text to see whether anything else changed.
+- **Closing tabs.** After a project full of plugins (FabFilter among them) was opened and saved under a new name,
+  `project.close_tab` often refused it as having unsaved changes, even right after the save. The cause wasn't found.
+  Write any record of the build before closing the tab, render from the saved file, and close the REAPER instance you
+  started when the work is done.
+
 ## Plugin state
 
 Some plugin settings aren't host parameters, such as a Kontakt instrument or a setting deep in a library's menus.
