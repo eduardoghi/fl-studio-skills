@@ -115,9 +115,11 @@ type prefix, such as `VST3:Kontakt 8` or `JS:`. `format` is `wav16`, `wav24` or 
   Write any record of the build before closing the tab, render from the saved file, and close the REAPER instance you
   started when the work is done.
 - **Memory.** Those tabs stay loaded with every instrument and effect. After a dozen builds of a large project, one
-  instance held 40 to 42 GB of private memory. Then a render process crashed (exit code 0xC00000FD) and analysis
-  scripts failed to allocate memory. Check the instance's memory between batches of builds, and restart the instance
-  you started once it grows.
+  instance held 40 to 42 GB of private memory, and with that, some analysis scripts failed to allocate memory. Check
+  the instance's memory between large batches of builds, and restart the instance you started once it grows.
+- **A separate crash.** In the same session, one render process ended with exit code 0xC00000FD, which is
+  `STATUS_STACK_OVERFLOW`, not a lack of memory. Its cause wasn't investigated. The same render succeeded after the
+  instance was restarted, but that doesn't show the memory caused it.
 
 ## Plugin state
 
