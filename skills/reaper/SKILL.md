@@ -95,14 +95,21 @@ type prefix, such as `VST3:Kontakt 8` or `JS:`. `format` is `wav16`, `wav24` or 
 
 ## Volume automation
 
-- **Ramps.** REAPER interpolates volume envelope points on the fader scale, not in dB. For a ramp that has to be linear
-  in dB, or to match a curve computed offline, write a point every 10 ms along it. With that, renders matched
-  dB-linear offline curves to −83 dB of residual, at worst −84 dBFS in a single sample.
+- **Ramps.** How a volume envelope moves between two points depends on its scaling mode (`GetEnvelopeScalingMode`,
+  which the bridge uses to convert dB, and `VOLTYPE` in the .rpp) and on the point shape. The envelopes written here
+  used fader scaling (`VOLTYPE 1`) and linear points, which don't follow a straight line in dB between distant points.
+  For a ramp that had to match a dB-linear curve computed offline, a point every 10 ms along it worked. Renders
+  matched those curves to −83 dB of residual, at worst −84 dBFS in a single sample. That spacing was validated in that
+  project, not compared with others, so treat it as a working value rather than a requirement.
 - **Folders.** A folder track's pre-FX volume envelope (`volume_prefx`) scales the sum of its children, return tracks
-  inside the folder included, before the folder's own effects. With only linear effects on the folder, such as EQ, it
-  works as an output gain for the whole group. It leaves an existing post-FX envelope alone, and the two multiply.
-- **Project text.** In the .rpp, `<VOLENV` is the pre-FX volume envelope and `<VOLENV2` the post-FX one. Strip both
-  when diffing project text to see whether anything else changed.
+  inside the folder included, before the folder's own effects. It leaves an existing post-FX envelope alone, and the
+  two multiply. A constant gain before linear effects such as EQ equals the same gain after them. A gain that moves
+  doesn't have to, during short ramps and on transients, and it changes what any nonlinear effect (a compressor, a
+  saturator) receives. One group with two EQs and ramps of an eighth note matched an offline version with the gain
+  applied after the effects to −83 dB. Confirm that equivalence in a render for each case rather than assuming it.
+- **Project text.** In the .rpp, `<VOLENV` is the pre-FX volume envelope and `<VOLENV2` the post-FX one. Stripping
+  both from a diff shows whether anything else changed, but says nothing about the automation. Compare the envelope
+  blocks on their own too, with their points, scaling and shapes, against what was meant to be written.
 - **Closing tabs.** After a project full of plugins (FabFilter among them) was opened and saved under a new name,
   `project.close_tab` often refused it as having unsaved changes, even right after the save. The cause wasn't found.
   Write any record of the build before closing the tab, render from the saved file, and close the REAPER instance you
