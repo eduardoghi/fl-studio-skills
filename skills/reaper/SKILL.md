@@ -114,6 +114,10 @@ type prefix, such as `VST3:Kontakt 8` or `JS:`. `format` is `wav16`, `wav24` or 
   `project.close_tab` often refused it as having unsaved changes, even right after the save. The cause wasn't found.
   Write any record of the build before closing the tab, render from the saved file, and close the REAPER instance you
   started when the work is done.
+- **Memory.** Those tabs stay loaded with every instrument and effect. After a dozen builds of a large project, one
+  instance held 40 to 42 GB of private memory. Then a render process crashed (exit code 0xC00000FD) and analysis
+  scripts failed to allocate memory. Check the instance's memory between batches of builds, and restart the instance
+  you started once it grows.
 
 ## Plugin state
 

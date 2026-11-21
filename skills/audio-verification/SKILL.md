@@ -25,6 +25,8 @@ Read only the file that matches the problem. Each one is self-contained.
   [references/velocities.md](references/velocities.md).
 - **A passage between sections sounds broken, or a piece is about to be exported.** See
   [references/transitions.md](references/transitions.md).
+- **A recorded vocal take has to be placed against a guide, checked for pitch or tuned.** See
+  [references/vocal-takes.md](references/vocal-takes.md).
 
 ## Commands
 
@@ -137,6 +139,21 @@ Read the delivered files back before handing them over.
   a residual near −144 dBFS against the float master.
 - **MP3.** Decode it and measure its true peak at 8x oversampling, since the encoding can pass the master's ceiling.
   One MP3 made from a −1 dBTP master decoded at −0.975 dBTP (see Pro-L 2 in the `plugins` skill).
+
+Integrated loudness needs at least one 400 ms block, so a shorter window reads as silence. Two such windows then
+compare as 0 LU apart, which looks like a real level. One vocal phrase of 0.37 s read 0 LU against the accompaniment
+while the others read about −2.5 LU, and it got a volume ride it didn't need. Widen short windows around their center
+to 0.5 s or more, or leave them out.
+
+A compressor's gain reduction can't be read from its meter through the host. Render the same chain once more with the
+compressor bypassed and compare the two, window by window or phrase by phrase. On one vocal, a first setting took
+about 8 dB by a level estimate, more than intended. With the threshold 5 dB higher, the bypass comparison gave a
+median of 3.9 dB, a 95th percentile of 5.8 dB and a maximum of 6.7 dB.
+
+For sibilance, compare the peaks of 5 to 10 kHz with the voice's median level over 100 Hz to 10 kHz, not with the
+1 to 4 kHz band in the same window. An unvoiced "s" between words has almost nothing at 1 to 4 kHz, so the per-window
+ratio grows large even when the "s" is quiet. On one dark vocal that ratio reached 26 dB, against 18 dB on a produced
+reference, while the peaks against the median voice level were within 1 dB of the reference's.
 
 When two measures disagree, compare their windows, bands and definitions before changing the part. A dip at a chord
 change read 1.8 dB when the minimum within 0.15 s was compared with the level 0.1 to 0.3 s away, and 15.5 dB when the
