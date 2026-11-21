@@ -38,8 +38,9 @@ skill explains, and the FL Studio bridge has its own setup in `fl-studio/bridge/
 
 - `skills/reaper`: drive REAPER through the mps bridge and command line, from building a project to a checked render.
 - `skills/audio-verification`: check rendered audio with measurements, since the agent can't listen. Covers
-  noise, thumps, harshness, levels, chord notes, level-matched A/B comparisons and a continuity audit of the
-  transitions between sections.
+  noise, thumps, harshness, levels, chord notes and level-matched A/B comparisons. Reference files read only when
+  needed cover transcribing a part from a recording, separated stems as targets, re-attacks and strings,
+  velocities and a continuity audit of the transitions between sections.
 - `skills/plugins`: notes per plugin on what the controls do, defaults that cause trouble, how their state restores,
   and parameter names, each marked with the host it was measured in.
 - `skills/music-composition`: develop a musical idea through intentional changes, compared by listening instead of

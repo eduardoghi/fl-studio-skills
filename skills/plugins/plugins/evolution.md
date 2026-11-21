@@ -118,7 +118,8 @@ Observed in REAPER 7.86:
   position change cost more than small moves and charging 0.5 per fret of height, still within a four-fret hand, raised
   it to 553 Hz. Check the string and fret distribution of a fingering before blaming the tone.
 - With all notes on channel 1, the engine played that riff mostly in low position, on the B string at frets 0 to 6
-  (estimated from the harmonic profile of 21 notes, see the `audio-verification` skill).
+  (estimated from the harmonic profile of 21 notes, see `references/reattacks-and-strings.md` in the
+  `audio-verification` skill).
 
 ## Articulations
 

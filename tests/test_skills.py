@@ -39,6 +39,21 @@ class Skills(unittest.TestCase):
             with self.subTest(note=note.name):
                 self.assertIn(f"`plugins/{note.name}`", index)
 
+    def test_relative_links_in_skills_exist(self):
+        for page in (ROOT / "skills").rglob("*.md"):
+            for target in re.findall(r"\]\(([^)#\s]+)\)", page.read_text(encoding="utf-8")):
+                if "://" in target:
+                    continue
+                with self.subTest(page=str(page.relative_to(ROOT)), link=target):
+                    self.assertTrue((page.parent / target).is_file())
+
+    def test_every_reference_file_is_linked_from_its_skill(self):
+        for skill in SKILLS:
+            body = (skill / "SKILL.md").read_text(encoding="utf-8")
+            for ref in (skill / "references").glob("*.md"):
+                with self.subTest(skill=skill.name, reference=ref.name):
+                    self.assertIn(f"(references/{ref.name})", body)
+
     def test_marketplace_lists_the_plugin(self):
         plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         marketplace = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
